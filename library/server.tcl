@@ -30,10 +30,10 @@ proc ::community::serve {config {initialize 0}} {
     }
     if {$initialize} {puts {Community schema initialized.}; return}
     set init [join [list [list set auto_path $::auto_path] {package require example-community} [list ::community::worker $config]] \n]
-    set server [::twebserver::create_server [dict create rootdir [pwd] max_request_read_bytes 4259840 gzip off] ::community::process $init]
+    set server [::twebserver::create_server [dict merge [dict create rootdir [pwd]] [dict get $config server_options]] ::community::process $init]
     try {
         # Loopback only. In PROD terminate HTTPS at a trusted reverse proxy.
-        ::twebserver::listen_server -http -host 127.0.0.1 -num_threads 1 $server [dict get $config port]
+        ::twebserver::listen_server -http -host [dict get $config listen_host] -num_threads [dict get $config num_threads] $server [dict get $config port]
         puts "Community: [dict get $config origin]"
         flush stdout
         ::twebserver::wait_signal
@@ -43,7 +43,7 @@ proc ::community::main {arguments} {
     if {$arguments eq {--help}} {
         puts {ENV=LOCAL example-community [--config site.tcl] [--port 8080] [--initdb true]
 ENV=PROD requires a trusted config dictionary with an HTTPS origin and key_file,
-and PostgreSQL options in config or PGHOST/PGPORT/PGDATABASE/PGUSER/PGPASSWORD.
+and PostgreSQL connection options in the config dictionary.
 --initdb true initializes schema/content and exits. No automatic PROD migrations.}
         return
     }

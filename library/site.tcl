@@ -2,19 +2,19 @@ proc ::community::settings {args} {
     variable root
     set mode [::web::user::environment]
     set base [expr {[info exists ::env(PROJECT_HOME)] ? $::env(PROJECT_HOME) : [pwd]}]
-    set config [::web::user::options [dict create port 8080 tenant community \
+    set config [::web::user::options [dict create port 8080 tenant community site_name {Juniper Yard} \
+        listen_host 127.0.0.1 num_threads 1 server_options {max_request_read_bytes 4259840 gzip off} \
+        account {} \
         sqlite_path [file join $base data community.sqlite3] postgresql {} \
         key_file [file join $base data community.keyset] origin http://localhost:8080 \
         master_template [::web::user::read_text [file join $root assets page.html.jinja]] \
         home_path /a-little-space-to-grow user {} forum {} wiki {allow_create true} blog {allow_create true}] {*}$args]
     ::web::wiki::canonical_path [dict get $config home_path]
-    if {$mode eq "PROD" && [dict get $config postgresql] eq {}} {
-        set pg {}
-        foreach {envName option} {PGHOST -host PGPORT -port PGDATABASE -database PGUSER -user PGPASSWORD -password PGSSLMODE -sslmode} {
-            if {[info exists ::env($envName)]} {dict set pg $option $::env($envName)}
-        }
-        dict set config postgresql $pg
-    }
+    # Database credentials are explicit config data, never implicit environment fallbacks.
+    dict set config account [::web::user::settings [dict merge [dict get $config account] [dict create tenant [dict get $config tenant]]]]
+    dict set config user [dict merge [dict create prefix /user origin [dict get $config origin] \
+        title [dict get $config site_name] issuer [dict get $config site_name]] [dict get $config user]]
+    dict set config forum [dict merge {prefix /forum title Forum} [dict get $config forum]]
     return $config
 }
 proc ::community::connection {config} {
@@ -50,18 +50,19 @@ proc ::community::initialize {connection config} {
 }
 proc ::community::router {connection config keys} {
     set router [::tpathexp::router]
-    set store [::web::user::create -connection $connection -tenant [dict get $config tenant] \
-        -aead [dict get $keys aead] -mac [dict get $keys mac]]
-    set shared [dict create master_template [dict get $config master_template]]
-    set auth [::web::user::mount $router -store $store -prefix /user -config \
-        [dict merge $shared [dict create origin [dict get $config origin] title {Juniper Yard} issuer {Juniper Yard}] [dict get $config user]]]
-    ::web::forum::mount $router -store $store -user $auth -prefix /forum -config [dict merge $shared [dict get $config forum]]
+    set store [::web::user::create -connection $connection -config [dict merge [dict get $config account] $keys]]
+    set properties [site_properties $config]
+    set shared [dict create master_template [dict get $config master_template] properties $properties]
+    set auth [::web::user::mount $router -store $store -config [dict merge $shared [dict get $config user]]]
+    ::web::forum::mount $router -store $store -user $auth -config [dict merge $shared [dict get $config forum]]
+    # Content packages receive these properties through their generic callback.
+    dict unset shared properties
     foreach kind {wiki blog} {
         set content [::web::${kind}::create -connection $connection -domain [dict get $config tenant] -title [string totitle $kind]]
         if {$kind eq "wiki"} {set homeStore $content}
         ::web::${kind}::mount $router -store $content -prefix /$kind \
             -authorize [list ::web::user::authorize $auth] -csrf [list ::web::user::csrf $auth] \
-            -context [list ::community::template_context $auth] \
+            -context [list ::community::template_context $config $auth] \
             -config [dict merge $shared [dict get $config $kind]]
     }
     $router add GET / [list ::community::home $config $homeStore $auth] -strict true
@@ -70,11 +71,14 @@ proc ::community::router {connection config keys} {
     return $router
 }
 # Host-owned properties are evaluated for this request, never saved globally.
-proc ::community::template_context {auth request context} {
+proc ::community::site_properties {config} {
+    ::web::user::text_fields [dict create site_name [dict get $config site_name] \
+        account_prefix [dict get $config user prefix] forum_prefix [dict get $config forum prefix]]
+}
+proc ::community::template_context {config auth request context} {
     set user [::web::user::current_user $auth $request $context]
-    dict create signed_in [list BOOL [expr {$user ne {}}]] \
-        show_edit_controls [list BOOL [expr {$user ne {}}]] \
-        site_name [list S {Juniper Yard}]
+    dict merge [site_properties $config] [dict create signed_in [list BOOL [expr {$user ne {}}]] \
+        show_edit_controls [list BOOL [expr {$user ne {}}]]]
 }
 proc ::community::home {config store auth request context params} {
     variable root
@@ -88,7 +92,7 @@ proc ::community::home {config store auth request context params} {
     set fields [::web::user::text_fields [dict create title [dict get $item title] \
         markdown_html [::cmark_gfm::render_gfm_html [dict get $item markdown]] \
         edit_url /wiki/_edit[dict get $item path]]]
-    set fields [dict merge $fields [template_context $auth $request $context]]
+    set fields [dict merge $fields [template_context $config $auth $request $context]]
     ::web::user::response 200 [::jinja2::render [dict get $templates home.html.jinja] \
         [::tjson::typed_to_json [list M $fields]] -templates $templates -path home.html.jinja]
 }

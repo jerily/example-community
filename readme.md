@@ -1,4 +1,4 @@
-# example-community (private)
+# example-community
 
 Juniper Yard is a fictional neighborhood garden and workshop in Alderwick: a runnable Tcl community site with one shared Jinja master template and four
 mounted packages: `/user` (accounts), `/forum` (discussions), `/wiki` (shared
@@ -8,11 +8,17 @@ LOCAL persists to SQLite; PROD uses PostgreSQL through `web-user::connect` and
 KSUIDs; session and recovery tokens use `twebserver::random_bytes`. Passwords use
 `bcrypt-tcl` at cost 12 (15-character minimum, 72 UTF-8 bytes maximum).
 
+The site pins `web-wiki` and `web-blog` to exactly `0.1.1` in `ttrek.json`.
+
 ## Run locally
 
+Use Tcl 9.1 or newer and source checkouts of this site and
+`web-user`, `web-forum`, `web-wiki` and `web-blog`, with their native dependencies
+installed. Put the checkout directories and the native install prefix's `lib`
+directory on `TCLLIBPATH`, then run:
+
 ```sh
-ttrek install -y -registry /path/to/private-ttrek-registry -add-pubreg example-community
-ENV=LOCAL ttrek run -package example-community -script start -- --port 8080
+ENV=LOCAL tclsh main.tcl --port 8080
 ```
 
 Open http://localhost:8080. Create an account, use the displayed LOCAL email code,
@@ -20,12 +26,6 @@ sign in, and enable an authenticator from Account. LOCAL also displays reset and
 current TOTP codes. Email delivery is a TODO in web-user. Account/recovery codes
 remain subject to expiry and replay checks. Site runtime data stays under the
 consuming project's `data/`, outside installed package directories.
-
-From a checkout with native dependencies and sibling packages on `TCLLIBPATH`:
-
-```sh
-ENV=LOCAL tclsh main.tcl --port 8080
-```
 
 LOCAL startup creates schema, synchronizes the bundled wiki/blog Markdown and
 creates `data/community.keyset` once with mode 0600. Keep this key file with the
@@ -40,15 +40,33 @@ content records persist across restarts. The host does not launch Docker.
 ```tcl
 port 8080
 tenant community
+site_name {Juniper Yard}
+listen_host 127.0.0.1
+num_threads 1
 home_path /a-little-space-to-grow
 origin http://localhost:8080
 sqlite_path ./data/community.sqlite3
 key_file ./data/community.keyset
-user {title Account issuer {Juniper Yard}}
-forum {title Discussions}
+account {
+    bcrypt_cost 12 password_min_length 15
+    totp_digits 6 totp_period 30 totp_algorithm SHA1 totp_window 1
+    session_ttl 43200 code_ttl 900 challenge_ttl 600
+    throttle_window 900 browse_limit 120 post_limit 60 account_limit 10 challenge_limit 5
+    form_max_bytes 32768
+}
+user {prefix /user title Account issuer {Juniper Yard} deliver {}}
+forum {prefix /forum title Discussions page_size 100 body_max_length 10000 title_max_length 160 post_limit 30}
 wiki {allow_create true}
 blog {allow_create true}
 ```
+
+The `account` dictionary configures web-user store policy. The host supplies
+its tenant and registers the `aead`/`mac` keysets from `key_file` in each worker;
+no secret is embedded in source. `user` configures the account mount, including
+issuer and optional delivery callback; `forum` configures the discussion mount.
+`site_name` populates account title/issuer and layout properties unless overridden.
+`listen_host`, `num_threads`, and `server_options` configure the listener.
+See [config.example.tcl](config.example.tcl) for a data-only starting point.
 
 The `master_template` property contains template **source**, shared with all four
 mounts. Omit it for `assets/page.html.jinja`. For programmatic configuration:
@@ -61,7 +79,7 @@ set config [::community::settings \
 
 Per-package dictionaries may override their own `master_template` and `templates`.
 The common layout uses `{% block body %}` and supports `editing`/`assets` supplied
-by the wiki/blog packages. Their package-owned editor assets are served
+by the wiki/blog/forum packages. Their package-owned editor assets are served
 by their own mounts. The host registers `/` and `/site.css` after mounting packages.
 All verified members can create/edit wiki/blog content in this example. Replace
 the authorization callback in `library/site.tcl` for a different editorial policy.
@@ -85,20 +103,20 @@ account session. The wiki/blog defaults still show configured editing controls
 for hosts that do not pass a callback. Authorization and CSRF remain independent
 server-side checks. The home template uses the same property for its edit link.
 
-The package and registry manifests use `scripts.start.file: start.sh`.
-The registry stores that script beside its recipe, and ttrek caches its contents
-for offline use. It launches the installed command using `PROJECT_INSTALL_DIR`.
+The package manifest uses `scripts.start.file: start.sh`. The script launches
+the installed command using `PROJECT_INSTALL_DIR`.
 
 ## Production
 
 Set `ENV=PROD`, an explicit HTTPS `origin`, and `postgresql` options in the config
-(or PGHOST, PGPORT, PGDATABASE, PGUSER, PGPASSWORD, PGSSLMODE). Credentials should
-come from the runtime environment/secret store rather than version control.
+dictionary. Supply credentials from your secret store when creating this
+dictionary; the package does not substitute environment variables implicitly.
+Keep deployment configuration and key files outside version control.
 Provide a persistent `key_file` in advance. Generate fresh Tink AES256_GCM and
 HMAC_SHA256 keysets using your trusted provisioning process and write a Tcl dict
 with `aead` and `mac` keys, restricted to the service account. PROD never silently
 generates missing keys or falls back to SQLite. TLS terminates at the host's
-reverse proxy; the example listener always binds loopback. Configure the proxy
+reverse proxy; the example listener defaults to loopback. Configure the proxy
 Host to equal `origin`'s authority and pass trusted client context in a production
 adapter to avoid sharing a per-peer limit across all proxied users.
 
@@ -110,7 +128,7 @@ ENV=PROD tclsh main.tcl --config production.tcl
 ```
 
 PROD startup validates routes/keys/configuration and does not create schema.
-Integrate `web-user -deliver` in `library/site.tcl` before enabling real email
+Set the `user.deliver` command prefix in the config before enabling real email
 registration/recovery. The default intentionally sends nothing. There is no
 production publishing/deployment step in this example package.
 
@@ -123,8 +141,8 @@ ENV=LOCAL python3 tests/http_test.py /path/to/tclsh
 
 HTTP checks start/stop a temporary loopback server and temporary SQLite database.
 They cover all four mounts, shared master templates, registration/login/recovery,
-forum XSS escaping, wiki/blog writes through web-user callbacks, rejected CSRF and
+forum Markdown rendering and XSS prevention, wiki/blog writes through web-user callbacks, rejected CSRF and
 session revocation, and data/key persistence across server restarts. The web-user
 suite separately exercises both SQLite and optional PostgreSQL, MFA and replay.
-See [web-user mounting documentation](../web-user/MOUNTING.md) for the reusable
+See [web-user mounting documentation](https://github.com/jerily/web-user/blob/main/MOUNTING.md) for the reusable
 package-to-site contract (installed as part of web-user as well).
