@@ -1,4 +1,8 @@
-{% extends "page.html.jinja" %}{% block body %}
-<section class="hero"><p class="eyebrow">WELCOME TO COMMON GROUND</p><h1>Good things grow<br>when we share them.</h1><p>A home for curious people, useful notes, and conversations worth having.</p><div class="actions"><a class="button" href="/user/register">Join the community</a><a href="/forum">Explore discussions →</a></div></section>
-<section class="cards"><a href="/forum"><span>01 / TALK</span><h2>Start a conversation</h2><p>Ask a question, share a discovery, or lend a hand.</p></a><a href="/wiki"><span>02 / LEARN</span><h2>Build our handbook</h2><p>Useful knowledge, cared for by the community.</p></a><a href="/blog"><span>03 / FOLLOW</span><h2>Read the journal</h2><p>Updates and stories from the people here.</p></a></section>
+{% extends "page.html.jinja" %}
+{% block body %}
+<section class="home-sheet" aria-label="{{ title }}">
+  <img class="yard-illustration" src="/yard.svg" alt="" width="520" height="520">
+  <div class="home-document">{{ markdown_html|safe }}</div>
+  {% if show_edit_controls %}<p class="page-tools"><a href="{{ edit_url }}">Edit this page ↗</a></p>{% endif %}
+</section>
 {% endblock %}

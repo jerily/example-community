@@ -54,16 +54,32 @@ def main():
             raise AssertionError("server did not start")
         proc = start()
         try:
-            assert "Good things grow" in fetch("/")
+            assert "A little space to grow." in fetch("/")
             for path, text in [("/forum", "Community discussions"), ("/wiki/community-handbook", "Community handbook"), ("/blog", "A place to build together")]:
                 body = fetch(path)
-                assert "Common Ground" in body and text in body, (path, body)
+                assert "Juniper Yard" in body and text in body, (path, body)
+            for kind in ("wiki", "blog"):
+                assert f'/{kind}/_new' not in fetch(f'/{kind}')
+            assert '/wiki/_edit' not in fetch('/wiki/community-handbook')
+            assert '/blog/_edit' not in fetch('/blog/2026-11-10-a-place-to-build-together')
             fetch("/wiki/_new", status=403)
             body = fetch("/user/register")
             body = fetch("/user/register", dict(email="member@example.com", password=PASSWORD, csrf=csrf(body)))
             body = fetch("/user/verify", dict(code=code(body), csrf=csrf(body)))
             body = fetch("/user/login", dict(email="member@example.com", password=PASSWORD, csrf=csrf(body)))
             assert "Signed in as member@example.com" in body
+            for kind in ("wiki", "blog"):
+                assert f'/{kind}/_new' in fetch(f'/{kind}')
+            assert '/wiki/_edit' in fetch('/wiki/community-handbook')
+            assert '/blog/_edit' in fetch('/blog/2026-11-10-a-place-to-build-together')
+            assert '/wiki/_edit/a-little-space-to-grow' in fetch('/')
+            body = fetch('/wiki/_edit/a-little-space-to-grow')
+            revision = re.search(r'name="revision" value="([^"\s]+)"', body)[1]
+            markdown = html.unescape(re.search(r'<textarea[^>]*name="markdown"[^>]*>(.*?)</textarea>', body, re.S)[1])
+            fetch('/wiki/_edit/a-little-space-to-grow', dict(title='A little space to grow.', markdown=markdown+'\n\nA member improved our home page.\n<script>unsafe()</script>', revision=revision, csrf=csrf(body)))
+            home = fetch('/')
+            assert 'A member improved our home page.' in home and '<script>unsafe()' not in home
+            assert any('.' in cookie.value for cookie in jar), 'session cookie must be signed'
             body = fetch("/forum/new")
             body = fetch("/forum/new", dict(title="First discussion", body="Hello <script>alert(1)</script>", csrf=csrf(body)))
             assert "First discussion" in body and "&lt;script&gt;" in body and "<script>alert" not in body
@@ -77,10 +93,14 @@ def main():
             fetch("/user/logout", dict(csrf="wrong"), status=403)
             fetch("/user/logout", dict(csrf=token))
             fetch("/forum/new", dict(title="Denied", body="No access", csrf=token), status=401)
+            assert '/wiki/_edit' not in fetch('/')
+            assert '/wiki/_new' not in fetch('/wiki')
+            assert '/blog/_new' not in fetch('/blog')
             proc.send_signal(signal.SIGTERM)
             proc.wait(timeout=5)
             proc = start()
             assert "First discussion" in fetch("/forum")
+            assert "A member improved our home page." in fetch("/")
             body = fetch("/user/login")
             body = fetch("/user/login", dict(email="member@example.com", password=PASSWORD, csrf=csrf(body)))
             assert "Signed in as member@example.com" in body
@@ -90,7 +110,7 @@ def main():
             fetch("/user/login", dict(email="member@example.com", password=PASSWORD, csrf=csrf(body)), status=401)
             body = fetch("/user/login", dict(email="member@example.com", password=PASSWORD + " updated", csrf=csrf(body)))
             assert "Signed in as" in body
-            print("HTTP checks passed: all four mounts, registration, login, forum, wiki/blog editing, CSRF, reset, restart persistence.")
+            print("HTTP checks passed: all mounts, signed cookies, login-aware controls, wiki-backed home, CSRF, reset and restart persistence.")
         finally:
             if proc.poll() is None:
                 proc.send_signal(signal.SIGTERM)

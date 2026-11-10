@@ -6,7 +6,8 @@ proc ::community::settings {args} {
         sqlite_path [file join $base data community.sqlite3] postgresql {} \
         key_file [file join $base data community.keyset] origin http://localhost:8080 \
         master_template [::web::user::read_text [file join $root assets page.html.jinja]] \
-        user {} forum {} wiki {allow_create true} blog {allow_create true}] {*}$args]
+        home_path /a-little-space-to-grow user {} forum {} wiki {allow_create true} blog {allow_create true}] {*}$args]
+    ::web::wiki::canonical_path [dict get $config home_path]
     if {$mode eq "PROD" && [dict get $config postgresql] eq {}} {
         set pg {}
         foreach {envName option} {PGHOST -host PGPORT -port PGDATABASE -database PGUSER -user PGPASSWORD -password PGSSLMODE -sslmode} {
@@ -53,22 +54,47 @@ proc ::community::router {connection config keys} {
         -aead [dict get $keys aead] -mac [dict get $keys mac]]
     set shared [dict create master_template [dict get $config master_template]]
     set auth [::web::user::mount $router -store $store -prefix /user -config \
-        [dict merge $shared [dict create origin [dict get $config origin] title Community issuer Community] [dict get $config user]]]
+        [dict merge $shared [dict create origin [dict get $config origin] title {Juniper Yard} issuer {Juniper Yard}] [dict get $config user]]]
     ::web::forum::mount $router -store $store -user $auth -prefix /forum -config [dict merge $shared [dict get $config forum]]
     foreach kind {wiki blog} {
         set content [::web::${kind}::create -connection $connection -domain [dict get $config tenant] -title [string totitle $kind]]
+        if {$kind eq "wiki"} {set homeStore $content}
         ::web::${kind}::mount $router -store $content -prefix /$kind \
             -authorize [list ::web::user::authorize $auth] -csrf [list ::web::user::csrf $auth] \
+            -context [list ::community::template_context $auth] \
             -config [dict merge $shared [dict get $config $kind]]
     }
-    $router add GET / [list ::community::home $config] -strict true
+    $router add GET / [list ::community::home $config $homeStore $auth] -strict true
     $router add GET /site.css ::community::stylesheet -strict true
+    $router add GET /yard.svg ::community::illustration -strict true
     return $router
 }
-proc ::community::home {config request context params} {
+# Host-owned properties are evaluated for this request, never saved globally.
+proc ::community::template_context {auth request context} {
+    set user [::web::user::current_user $auth $request $context]
+    dict create signed_in [list BOOL [expr {$user ne {}}]] \
+        show_edit_controls [list BOOL [expr {$user ne {}}]] \
+        site_name [list S {Juniper Yard}]
+}
+proc ::community::home {config store auth request context params} {
     variable root
+    try {
+        set item [::web::wiki::load $store [dict get $config home_path]]
+        if {[dict get $item item_type] ne "page"} {::web::wiki::fail 404 "Home must be a wiki page."}
+    } trap {WEB WIKI} {message options} {
+        return [::web::user::response [lindex [dict get $options -errorcode] 2] $message text/plain]
+    }
     set templates [dict create page.html.jinja [dict get $config master_template] home.html.jinja [::web::user::read_text [file join $root assets home.html.jinja]]]
-    ::web::user::response 200 [::jinja2::render [dict get $templates home.html.jinja] {{"title":"Welcome"}} -templates $templates -path home.html.jinja]
+    set fields [::web::user::text_fields [dict create title [dict get $item title] \
+        markdown_html [::cmark_gfm::render_gfm_html [dict get $item markdown]] \
+        edit_url /wiki/_edit[dict get $item path]]]
+    set fields [dict merge $fields [template_context $auth $request $context]]
+    ::web::user::response 200 [::jinja2::render [dict get $templates home.html.jinja] \
+        [::tjson::typed_to_json [list M $fields]] -templates $templates -path home.html.jinja]
+}
+proc ::community::illustration {request context params} {
+    variable root
+    ::web::user::response 200 [::web::user::read_text [file join $root assets yard.svg]] image/svg+xml
 }
 proc ::community::stylesheet {request context params} {
     variable root
