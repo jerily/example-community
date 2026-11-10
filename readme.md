@@ -8,7 +8,7 @@ LOCAL persists to SQLite; PROD uses PostgreSQL through `web-user::connect` and
 KSUIDs; session and recovery tokens use `twebserver::random_bytes`. Passwords use
 `bcrypt-tcl` at cost 12 (6-character minimum, 72 UTF-8 bytes maximum).
 
-The site pins `web-user` and `web-forum` to `=0.1.3`, and `web-wiki` and
+The site pins `web-user` and `web-forum` to `=0.1.4`, and `web-wiki` and
 `web-blog` to `=0.1.1`, in `ttrek.json`.
 
 ## Run locally
@@ -16,7 +16,7 @@ The site pins `web-user` and `web-forum` to `=0.1.3`, and `web-wiki` and
 Install and run the released site with ttrek:
 
 ```sh
-ttrek install -y example-community@0.1.3
+ttrek install -y example-community@0.1.4
 ENV=LOCAL ttrek run -package example-community -script start -- --port 8080
 ```
 
