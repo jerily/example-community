@@ -4,4 +4,4 @@ SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 if [ -f "$SCRIPT_DIR/../main.tcl" ]; then
     exec "${TCLSH:-tclsh}" "$SCRIPT_DIR/../main.tcl" "$@"
 fi
-exec "${TCLSH:-tclsh}" "$SCRIPT_DIR/../lib/example-community0.1.0/main.tcl" "$@"
+exec "${TCLSH:-tclsh}" "$SCRIPT_DIR/../lib/example-community0.1.1/main.tcl" "$@"

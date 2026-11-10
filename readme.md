@@ -1,11 +1,12 @@
 # example-community (private)
 
-A runnable Tcl community site with one shared Jinja master template and four
+Juniper Yard is a fictional neighborhood garden and workshop in Alderwick: a runnable Tcl community site with one shared Jinja master template and four
 mounted packages: `/user` (accounts), `/forum` (discussions), `/wiki` (shared
-handbook), and `/blog` (journal). `web-wiki` and `web-blog` are consumed unchanged.
+handbook), and `/blog` (journal). The host passes per-request template properties to `web-wiki` and `web-blog`.
 LOCAL persists to SQLite; PROD uses PostgreSQL through `web-user::connect` and
 `tpersist`. All ordinary record IDs introduced by the account/forum packages are
-KSUIDs; session and recovery tokens use cryptographic randomness.
+KSUIDs; session and recovery tokens use `twebserver::random_bytes`. Passwords use
+`bcrypt-tcl` at cost 12 (15-character minimum, 72 UTF-8 bytes maximum).
 
 ## Run locally
 
@@ -39,10 +40,11 @@ content records persist across restarts. The host does not launch Docker.
 ```tcl
 port 8080
 tenant community
+home_path /a-little-space-to-grow
 origin http://localhost:8080
 sqlite_path ./data/community.sqlite3
 key_file ./data/community.keyset
-user {title Account issuer {Common Ground}}
+user {title Account issuer {Juniper Yard}}
 forum {title Discussions}
 wiki {allow_create true}
 blog {allow_create true}
@@ -59,10 +61,33 @@ set config [::community::settings \
 
 Per-package dictionaries may override their own `master_template` and `templates`.
 The common layout uses `{% block body %}` and supports `editing`/`assets` supplied
-by the unchanged wiki/blog packages. Their package-owned editor assets are served
+by the wiki/blog packages. Their package-owned editor assets are served
 by their own mounts. The host registers `/` and `/site.css` after mounting packages.
 All verified members can create/edit wiki/blog content in this example. Replace
 the authorization callback in `library/site.tcl` for a different editorial policy.
+
+## Home page and dynamic properties
+
+The home page loads the wiki item selected by `home_path`; its body is never
+hard-coded in the Jinja template. `content/wiki/home.md` seeds that item. LOCAL
+startup syncs `content/wiki` and `content/blog`. In PROD, run `--initdb true`
+explicitly to sync. The wiki slug comes from the Markdown's first heading, so
+update `home_path` if you change that heading in the source file.
+
+A browser edit creates a revision and appears immediately on `/`. Restarting
+with an unchanged source file preserves that edit. Changing the source file
+creates a new revision and replaces the imported item with the changed source.
+Removing the source hides its imported item; a missing home item returns 404.
+
+The host's `template_context` callback returns typed Jinja properties for each
+request. It supplies `signed_in` and `show_edit_controls` based on the current
+account session. The wiki/blog defaults still show configured editing controls
+for hosts that do not pass a callback. Authorization and CSRF remain independent
+server-side checks. The home template uses the same property for its edit link.
+
+The package and registry manifests use `scripts.start.file: start.sh`.
+The registry stores that script beside its recipe, and ttrek caches its contents
+for offline use. It launches the installed command using `PROJECT_INSTALL_DIR`.
 
 ## Production
 
