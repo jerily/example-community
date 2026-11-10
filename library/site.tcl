@@ -1,22 +1,3 @@
-proc ::community::settings {args} {
-    variable root
-    set mode [::web::user::environment]
-    set base [expr {[info exists ::env(PROJECT_HOME)] ? $::env(PROJECT_HOME) : [pwd]}]
-    set config [::web::user::options [dict create port 8080 tenant community site_name {Juniper Yard} \
-        listen_host 127.0.0.1 num_threads 1 server_options {max_request_read_bytes 4259840 gzip off} \
-        account {} \
-        sqlite_path [file join $base data community.sqlite3] postgresql {} \
-        key_file [file join $base data community.keyset] origin http://localhost:8080 \
-        master_template [::web::user::read_text [file join $root assets page.html.jinja]] \
-        home_path /a-little-space-to-grow user {} forum {} wiki {allow_create true} blog {allow_create true}] {*}$args]
-    ::web::wiki::canonical_path [dict get $config home_path]
-    # Database credentials are explicit config data, never implicit environment fallbacks.
-    dict set config account [::web::user::settings [dict merge [dict get $config account] [dict create tenant [dict get $config tenant]]]]
-    dict set config user [dict merge [dict create prefix /user origin [dict get $config origin] \
-        title [dict get $config site_name] issuer [dict get $config site_name]] [dict get $config user]]
-    dict set config forum [dict merge {prefix /forum title Forum} [dict get $config forum]]
-    return $config
-}
 proc ::community::connection {config} {
     ::web::user::connect [dict create sqlite_path [dict get $config sqlite_path] postgresql [dict get $config postgresql]]
 }

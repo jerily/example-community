@@ -6,13 +6,21 @@ handbook), and `/blog` (journal). The host passes per-request template propertie
 LOCAL persists to SQLite; PROD uses PostgreSQL through `web-user::connect` and
 `tpersist`. All ordinary record IDs introduced by the account/forum packages are
 KSUIDs; session and recovery tokens use `twebserver::random_bytes`. Passwords use
-`bcrypt-tcl` at cost 12 (15-character minimum, 72 UTF-8 bytes maximum).
+`bcrypt-tcl` at cost 12 (6-character minimum, 72 UTF-8 bytes maximum).
 
-The site pins `web-wiki` and `web-blog` to exactly `0.1.1` in `ttrek.json`.
+The site pins `web-user` and `web-forum` to `=0.1.3`, and `web-wiki` and
+`web-blog` to `=0.1.1`, in `ttrek.json`.
 
 ## Run locally
 
-Use Tcl 9.1 or newer and source checkouts of this site and
+Install and run the released site with ttrek:
+
+```sh
+ttrek install -y example-community@0.1.3
+ENV=LOCAL ttrek run -package example-community -script start -- --port 8080
+```
+
+For development, use Tcl 9.1 or newer and source checkouts of this site and
 `web-user`, `web-forum`, `web-wiki` and `web-blog`, with their native dependencies
 installed. Put the checkout directories and the native install prefix's `lib`
 directory on `TCLLIBPATH`, then run:
@@ -33,54 +41,57 @@ database: replacing it makes encrypted fields unreadable and revokes sessions.
 No demo users or hard-coded passwords are created. Account, discussion and edited
 content records persist across restarts. The host does not launch Docker.
 
-## Site properties
+## Configuration with tconfig
 
-`--config path` reads a trusted Tcl dictionary (data only, not an evaluated script):
+The site loads [config.ini](config.ini) through `tconfig`. `--config site.ini`
+overrides selected values by section; there is no Tcl dictionary configuration
+file or evaluated configuration script. Plain INI uses `tconfig::read_config`
+without an AWS request. Files containing tconfig's encrypted key envelope use
+`tconfig::load_config` and the standard AWS credential/profile configuration.
 
-```tcl
-port 8080
-tenant community
-site_name {Juniper Yard}
-listen_host 127.0.0.1
-num_threads 1
-home_path /a-little-space-to-grow
-origin http://localhost:8080
-sqlite_path ./data/community.sqlite3
-key_file ./data/community.keyset
-account {
-    bcrypt_cost 12 password_min_length 15
-    totp_digits 6 totp_period 30 totp_algorithm SHA1 totp_window 1
-    session_ttl 43200 code_ttl 900 challenge_ttl 600
-    throttle_window 900 browse_limit 120 post_limit 60 account_limit 10 challenge_limit 5
-    form_max_bytes 32768
-}
-user {prefix /user title Account issuer {Juniper Yard} deliver {}}
-forum {prefix /forum title Discussions page_size 100 body_max_length 10000 title_max_length 160 post_limit 30}
-wiki {allow_create true}
-blog {allow_create true}
+```ini
+[site]
+site_name = Juniper Yard
+origin = http://localhost:8080
+port = 8080
+sqlite_path = data/community.sqlite3
+key_file = data/community.keyset
+
+[account]
+password_min_length = 6
+bcrypt_cost = 12
+
+[user]
+issuer = Juniper Yard
+prefix = /user
+
+[forum]
+prefix = /forum
+title = Discussions
 ```
 
-The `account` dictionary configures web-user store policy. The host supplies
-its tenant and registers the `aead`/`mac` keysets from `key_file` in each worker;
-no secret is embedded in source. `user` configures the account mount, including
-issuer and optional delivery callback; `forum` configures the discussion mount.
-`site_name` populates account title/issuer and layout properties unless overridden.
-`listen_host`, `num_threads`, and `server_options` configure the listener.
-See [config.example.tcl](config.example.tcl) for a data-only starting point.
+`[site]` owns the origin, identity, paths and listener address/port. `[account]`
+sets web-user policy; `[user]`, `[forum]`, `[wiki]` and `[blog]` supply each mount's
+properties. `[server]` holds twebserver options and `[postgresql]` contains database
+connection properties such as `host`, `port`, `database`, `user`, `password` and
+`sslmode`. Omitted values keep the defaults from the bundled INI file.
 
-The `master_template` property contains template **source**, shared with all four
-mounts. Omit it for `assets/page.html.jinja`. For programmatic configuration:
+The host loads persistent `aead`/`mac` keysets from `key_file` per worker; no secret
+is embedded in application code. Runtime data paths are relative to `PROJECT_HOME`
+or the working directory. `--port` updates the default LOCAL origin's port unless
+the override file explicitly supplies `[site] origin`.
+
+Set `master_template_file` in `[site]` to share a custom master, or in an individual
+mount section to override only that package. Template paths are relative to the
+INI file declaring them. The host reads the template source and passes it to the
+mount. The master defines `{% block body %}` and loads `editing`/`assets` supplied
+by wiki/blog/forum. Their editor assets remain owned by their own mounts.
 
 ```tcl
-set config [::community::settings \
-    master_template [::web::user::read_text /path/to/site-master.html.jinja]]
+set config [::community::load_config /path/to/site.ini]
 ::community::serve $config
 ```
 
-Per-package dictionaries may override their own `master_template` and `templates`.
-The common layout uses `{% block body %}` and supports `editing`/`assets` supplied
-by the wiki/blog/forum packages. Their package-owned editor assets are served
-by their own mounts. The host registers `/` and `/site.css` after mounting packages.
 All verified members can create/edit wiki/blog content in this example. Replace
 the authorization callback in `library/site.tcl` for a different editorial policy.
 
@@ -108,10 +119,11 @@ the installed command using `PROJECT_INSTALL_DIR`.
 
 ## Production
 
-Set `ENV=PROD`, an explicit HTTPS `origin`, and `postgresql` options in the config
-dictionary. Supply credentials from your secret store when creating this
-dictionary; the package does not substitute environment variables implicitly.
-Keep deployment configuration and key files outside version control.
+Set `ENV=PROD` and supply `--config production.ini` with an explicit HTTPS
+`[site] origin` and `[postgresql]` connection settings. Use tconfig's
+`encrypt_config`/`tconfig-encrypt.tcl` provisioning tool to populate settings from
+SSM and encrypt SecureString values with KMS. Keep deployment files and keysets
+outside version control. LOCAL plain INI needs no AWS access.
 Provide a persistent `key_file` in advance. Generate fresh Tink AES256_GCM and
 HMAC_SHA256 keysets using your trusted provisioning process and write a Tcl dict
 with `aead` and `mac` keys, restricted to the service account. PROD never silently
@@ -123,12 +135,12 @@ adapter to avoid sharing a per-peer limit across all proxied users.
 Initialize a new database explicitly before starting workers:
 
 ```sh
-ENV=PROD tclsh main.tcl --config production.tcl --initdb true
-ENV=PROD tclsh main.tcl --config production.tcl
+ENV=PROD tclsh main.tcl --config production.ini --initdb true
+ENV=PROD tclsh main.tcl --config production.ini
 ```
 
 PROD startup validates routes/keys/configuration and does not create schema.
-Set the `user.deliver` command prefix in the config before enabling real email
+Set the `deliver` command prefix in the `[user]` section before enabling real email
 registration/recovery. The default intentionally sends nothing. There is no
 production publishing/deployment step in this example package.
 

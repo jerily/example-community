@@ -1,24 +1,107 @@
 package require tcltest
 package require example-community
 namespace import ::tcltest::*
-test site-1 {site config can override layout independently; PROD fails closed without database config} -body {
-    set ::env(ENV) LOCAL
-    set a [::community::settings master_template {<main>{% block body %}{% endblock %}</main>}]
-    set b [::community::settings]
-    set ::env(ENV) PROD
-    set result [list [expr {[dict get $a master_template] ne [dict get $b master_template]}] [catch {::web::user::connect {sqlite_path :memory:}}]]
-    set ::env(ENV) INVALID
-    lappend result [catch {::community::settings}]
-    set ::env(ENV) LOCAL
-    set result
-} -result {1 1 1}
 
-test site-2 {config supplies site identity, account policy, custom prefixes and explicit database options} -body {
+test site-1 {tconfig overrides the master; PROD and invalid ENV fail closed} -setup {
+    set template [makeFile {<main>{% block body %}{% endblock %}</main>} master.html.jinja]
+    set filename [makeFile "\[site\]\nmaster_template_file = $template\n" site.ini]
+} -body {
     set ::env(ENV) LOCAL
-    set c [::community::settings site_name {Another Garden} tenant garden account {totp_digits 8 bcrypt_cost 5} \
-        user {prefix /members} forum {prefix /talk body_max_length 2000}]
-    set values [::community::site_properties $c]
-    list [dict get $c user issuer] [dict get $c account totp_digits] [dict get $c account tenant] \
-        [dict get $values account_prefix] [dict get $values forum_prefix] [dict get $c postgresql]
-} -result {{Another Garden} 8 garden {S /members} {S /talk} {}}
+    set customized [::community::load_config $filename]
+    set defaults [::community::load_config]
+    set ::env(ENV) PROD
+    set result [list [expr {[dict get $customized master_template] ne [dict get $defaults master_template]}] \
+        [catch {::community::load_config}] [catch {::web::user::connect {sqlite_path :memory:}}]]
+    set ::env(ENV) INVALID
+    lappend result [catch {::community::load_config}]
+    set result
+} -cleanup {
+    set ::env(ENV) LOCAL
+    removeFile $filename
+    removeFile $template
+} -result {1 1 1 1}
+
+test site-2 {INI sections supply identity, policy, origin and mount prefixes} -setup {
+    set filename [makeFile {[site]
+site_name = Another Garden
+tenant = garden
+origin = http://garden.test:8090
+[account]
+totp_digits = 8
+bcrypt_cost = 5
+[user]
+prefix = /members
+[forum]
+prefix = /talk
+body_max_length = 2000
+} site.ini]
+} -body {
+    set ::env(ENV) LOCAL
+    set config [::community::load_config $filename 8081]
+    set values [::community::site_properties $config]
+    list [dict get $config user issuer] [dict get $config account totp_digits] [dict get $config account tenant] \
+        [dict get $values account_prefix] [dict get $values forum_prefix] [dict get $config postgresql] \
+        [dict get $config user origin] [dict get $config account password_min_length]
+} -cleanup {removeFile $filename} -result {{Another Garden} 8 garden {S /members} {S /talk} {} http://garden.test:8090 6}
+
+test site-3 {community policy and default origin port can be overridden without changing package defaults} -setup {
+    set filename [makeFile "\[account\]\npassword_min_length = 18\n" site.ini]
+} -body {
+    set ::env(ENV) LOCAL
+    set defaults [::community::load_config {} 8081]
+    set stronger [::community::load_config $filename]
+    list [dict get $defaults account password_min_length] [dict get $stronger account password_min_length] \
+        [dict get [::web::user::settings {}] password_min_length] [dict get $defaults origin]
+} -cleanup {removeFile $filename} -result {6 18 15 http://localhost:8081}
+
+test site-4 {plain LOCAL INI does not create an AWS client} -setup {
+    rename ::tconfig::get_aws_kms_client ::tconfig::saved_kms_client
+    proc ::tconfig::get_aws_kms_client {profile} {error "unexpected AWS call"}
+} -body {
+    set ::env(ENV) LOCAL
+    dict get [::community::load_config] account password_min_length
+} -cleanup {
+    rename ::tconfig::get_aws_kms_client {}
+    rename ::tconfig::saved_kms_client ::tconfig::get_aws_kms_client
+} -result 6
+
+# Exercise tconfig's real decrypt path with generated keys and a local KMS fixture.
+# No service credentials, network calls or containers are used by this test.
+namespace eval ::configtest {}
+proc ::configtest::kms {method args} {
+    variable keyset
+    variable destroyed
+    switch -- $method {
+        decrypt {
+            if {[lindex $args 0] ne "test-envelope"} {error "unexpected key envelope"}
+            return $keyset
+        }
+        destroy {set destroyed 1}
+        default {error "unexpected KMS operation"}
+    }
+}
+test site-5 {tconfig decrypts deployment properties before adapting package settings} -setup {
+    set ::configtest::keyset [::tink::aead::create_keyset AES256_GCM]
+    set handle [::tink::register_keyset $::configtest::keyset]
+    set ciphertext [binary encode base64 -maxlen 0 [::tink::aead::encrypt $handle runtime-test-secret]]
+    ::tink::unregister_keyset $handle
+    set filename [makeFile {} encrypted.ini]
+    ::tconfig::write_config [dict create tconfig [dict create tink_keyset [binary encode base64 test-envelope]] \
+        site {origin https://garden.example} postgresql [dict create host db database community user community enc:password $ciphertext]] $filename
+    set ::configtest::destroyed 0
+    rename ::tconfig::get_aws_kms_client ::tconfig::saved_kms_client
+    proc ::tconfig::get_aws_kms_client {profile} {return ::configtest::kms}
+} -body {
+    set ::env(ENV) PROD
+    set config [::community::load_config $filename]
+    list [dict get $config user origin] [dict get $config postgresql -host] \
+        [expr {[dict get $config postgresql -password] eq "runtime-test-secret"}] $::configtest::destroyed
+} -cleanup {
+    set ::env(ENV) LOCAL
+    removeFile $filename
+    rename ::tconfig::get_aws_kms_client {}
+    rename ::tconfig::saved_kms_client ::tconfig::get_aws_kms_client
+    unset ::configtest::keyset
+} -result {https://garden.example db 1 1}
+
 cleanupTests

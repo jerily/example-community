@@ -41,22 +41,14 @@ proc ::community::serve {config {initialize 0}} {
 }
 proc ::community::main {arguments} {
     if {$arguments eq {--help}} {
-        puts {ENV=LOCAL example-community [--config site.tcl] [--port 8080] [--initdb true]
-ENV=PROD requires a trusted config dictionary with an HTTPS origin and key_file,
-and PostgreSQL connection options in the config dictionary.
+        puts {ENV=LOCAL example-community [--config site.ini] [--port 8080] [--initdb true]
+Configuration uses tconfig INI files; encrypted values use AWS KMS.
+ENV=PROD requires --config with an HTTPS site origin, key_file and PostgreSQL settings.
 --initdb true initializes schema/content and exits. No automatic PROD migrations.}
         return
     }
     set args [::web::user::options {--config {} --port {} --initdb false} {*}$arguments]
-    set input {}
-    if {[dict get $args --config] ne {}} {set input [::web::user::read_text [dict get $args --config]]}
-    if {[dict get $args --port] ne {}} {
-        dict set input port [dict get $args --port]
-        if {[::web::user::environment] eq "LOCAL" && ![dict exists $input origin]} {dict set input origin http://localhost:[dict get $args --port]}
-    }
-    set config [settings {*}$input]
-    set port [dict get $config port]
-    if {![string is integer -strict $port] || $port < 1 || $port > 65535} {error "invalid port"}
+    set config [load_config [dict get $args --config] [dict get $args --port]]
     if {![string is boolean -strict [dict get $args --initdb]]} {error "--initdb must be a boolean"}
     serve $config [dict get $args --initdb]
 }
