@@ -81,8 +81,8 @@ def main():
             assert 'A member improved our home page.' in home and '<script>unsafe()' not in home
             assert any('.' in cookie.value for cookie in jar), 'session cookie must be signed'
             body = fetch("/forum/new")
-            body = fetch("/forum/new", dict(title="First discussion", body="Hello <script>alert(1)</script>", csrf=csrf(body)))
-            assert "First discussion" in body and "&lt;script&gt;" in body and "<script>alert" not in body
+            body = fetch("/forum/new", dict(title="First discussion", body="**Hello** <script>alert(1)</script>", csrf=csrf(body)))
+            assert "First discussion" in body and "<strong>Hello</strong>" in body and "<script>alert" not in body
             for kind in ("wiki", "blog"):
                 body = fetch(f"/{kind}/_new")
                 fields = dict(title="Community HTTP note", markdown="A persistent community note.", csrf=csrf(body))

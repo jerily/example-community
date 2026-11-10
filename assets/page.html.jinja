@@ -4,18 +4,18 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#284d3b">
-  <title>{{ title }} · Juniper Yard</title>
+  <title>{{ title }} · {{ site_name }}</title>
   <link rel="stylesheet" href="/site.css">
   {% if editing %}<link rel="stylesheet" href="{{ assets }}/editor.css">{% endif %}
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
   <header class="site-header">
-    <a class="brand" href="/" aria-label="Juniper Yard home"><span class="brand-mark" aria-hidden="true">✳</span><span>Juniper Yard<small>A neighborhood, made together.</small></span></a>
-    <nav aria-label="Main navigation"><a href="/forum">The forum</a><a href="/wiki">Our notebook</a><a href="/blog">Journal</a>{% if signed_in %}<a class="nav-account" href="/user">Your account ↗</a>{% else %}<a class="nav-account" href="/user/login">Come on in ↗</a>{% endif %}</nav>
+    <a class="brand" href="/" aria-label="{{ site_name }} home"><span class="brand-mark" aria-hidden="true">✳</span><span>{{ site_name }}<small>A neighborhood, made together.</small></span></a>
+    <nav aria-label="Main navigation"><a href="{{ forum_prefix }}">The forum</a><a href="/wiki">Our notebook</a><a href="/blog">Journal</a>{% if signed_in %}<a class="nav-account" href="{{ account_prefix }}">Your account ↗</a>{% else %}<a class="nav-account" href="{{ account_prefix }}/login">Come on in ↗</a>{% endif %}</nav>
   </header>
   <main id="main">{% block body %}{% endblock %}</main>
-  <footer class="site-footer"><a class="footer-brand" href="/">Juniper Yard<span>Good company. Common ground.</span></a><p>A fictional community in Alderwick.<br>A working example of a place to belong.</p><a href="/wiki/community-handbook">Make yourself at home ↗</a></footer>
+  <footer class="site-footer"><a class="footer-brand" href="/">{{ site_name }}<span>Good company. Common ground.</span></a><p>A fictional community in Alderwick.<br>A working example of a place to belong.</p><a href="/wiki/community-handbook">Make yourself at home ↗</a></footer>
   {% if editing %}<script type="module" src="{{ assets }}/markdown-editor.bundle.js"></script>{% endif %}
 </body>
 </html>

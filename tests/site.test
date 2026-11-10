@@ -12,4 +12,13 @@ test site-1 {site config can override layout independently; PROD fails closed wi
     set ::env(ENV) LOCAL
     set result
 } -result {1 1 1}
+
+test site-2 {config supplies site identity, account policy, custom prefixes and explicit database options} -body {
+    set ::env(ENV) LOCAL
+    set c [::community::settings site_name {Another Garden} tenant garden account {totp_digits 8 bcrypt_cost 5} \
+        user {prefix /members} forum {prefix /talk body_max_length 2000}]
+    set values [::community::site_properties $c]
+    list [dict get $c user issuer] [dict get $c account totp_digits] [dict get $c account tenant] \
+        [dict get $values account_prefix] [dict get $values forum_prefix] [dict get $c postgresql]
+} -result {{Another Garden} 8 garden {S /members} {S /talk} {}}
 cleanupTests

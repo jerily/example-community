@@ -1,7 +1,25 @@
 #!/bin/sh
-# Locate an installed package or run directly from a checkout.
-SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-if [ -f "$SCRIPT_DIR/../main.tcl" ]; then
-    exec "${TCLSH:-tclsh}" "$SCRIPT_DIR/../main.tcl" "$@"
+set -eu
+# Locate the source checkout or installed package.
+site_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+if [ -f "$site_root/lib/example-community0.1.2/main.tcl" ]; then
+    site_root="$site_root/lib/example-community0.1.2"
 fi
-exec "${TCLSH:-tclsh}" "$SCRIPT_DIR/../lib/example-community0.1.1/main.tcl" "$@"
+if [ -n "${TCLSH:-}" ]; then
+    exec "$TCLSH" "$site_root/main.tcl" "$@"
+fi
+# Prefer the consuming project's runtime, then Tcl 9.1 on PATH.
+if [ -n "${PROJECT_INSTALL_DIR:-}" ]; then
+    for interpreter in tclsh9.1 tclsh; do
+        if [ -x "$PROJECT_INSTALL_DIR/bin/$interpreter" ]; then
+            exec "$PROJECT_INSTALL_DIR/bin/$interpreter" "$site_root/main.tcl" "$@"
+        fi
+    done
+fi
+for interpreter in tclsh9.1 tclsh; do
+    if command -v "$interpreter" >/dev/null 2>&1; then
+        exec "$interpreter" "$site_root/main.tcl" "$@"
+    fi
+done
+echo "Tcl 9.1 or newer is required." >&2
+exit 1
