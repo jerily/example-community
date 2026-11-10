@@ -27,6 +27,7 @@ site_name = Another Garden
 tenant = garden
 origin = http://garden.test:8090
 [account]
+email_hash_salt = configured-test-salt
 totp_digits = 8
 bcrypt_cost = 5
 [user]
@@ -41,8 +42,9 @@ body_max_length = 2000
     set values [::community::site_properties $config]
     list [dict get $config user issuer] [dict get $config account totp_digits] [dict get $config account tenant] \
         [dict get $values account_prefix] [dict get $values forum_prefix] [dict get $config postgresql] \
-        [dict get $config user origin] [dict get $config account password_min_length]
-} -cleanup {removeFile $filename} -result {{Another Garden} 8 garden {S /members} {S /talk} {} http://garden.test:8090 6}
+        [dict get $config user origin] [dict get $config account password_min_length] \
+        [dict get $config account email_hash_salt]
+} -cleanup {removeFile $filename} -result {{Another Garden} 8 garden {S /members} {S /talk} {} http://garden.test:8090 6 configured-test-salt}
 
 test site-3 {community policy and default origin port can be overridden without changing package defaults} -setup {
     set filename [makeFile "\[account\]\npassword_min_length = 18\n" site.ini]
@@ -87,7 +89,8 @@ test site-5 {tconfig decrypts deployment properties before adapting package sett
     ::tink::unregister_keyset $handle
     set filename [makeFile {} encrypted.ini]
     ::tconfig::write_config [dict create tconfig [dict create tink_keyset [binary encode base64 test-envelope]] \
-        site {origin https://garden.example} postgresql [dict create host db database community user community enc:password $ciphertext]] $filename
+        site {origin https://garden.example} account [dict create enc:email_hash_salt $ciphertext] \
+        postgresql [dict create host db database community user community enc:password $ciphertext]] $filename
     set ::configtest::destroyed 0
     rename ::tconfig::get_aws_kms_client ::tconfig::saved_kms_client
     proc ::tconfig::get_aws_kms_client {profile} {return ::configtest::kms}
@@ -95,14 +98,15 @@ test site-5 {tconfig decrypts deployment properties before adapting package sett
     set ::env(ENV) PROD
     set config [::community::load_config $filename]
     list [dict get $config user origin] [dict get $config postgresql -host] \
-        [expr {[dict get $config postgresql -password] eq "runtime-test-secret"}] $::configtest::destroyed
+        [expr {[dict get $config postgresql -password] eq "runtime-test-secret"}] \
+        [expr {[dict get $config account email_hash_salt] eq "runtime-test-secret"}] $::configtest::destroyed
 } -cleanup {
     set ::env(ENV) LOCAL
     removeFile $filename
     rename ::tconfig::get_aws_kms_client {}
     rename ::tconfig::saved_kms_client ::tconfig::get_aws_kms_client
     unset ::configtest::keyset
-} -result {https://garden.example db 1 1}
+} -result {https://garden.example db 1 1 1}
 
 test site-6 {tconfig enables name collection and accepts a per-site override} -setup {
     set filename [makeFile "\[account\]\ncollect_names = false\n" names.ini]

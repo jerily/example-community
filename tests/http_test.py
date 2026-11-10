@@ -43,7 +43,7 @@ def main():
     with tempfile.TemporaryDirectory() as folder, tempfile.TemporaryFile(mode="w+") as log:
         env = dict(os.environ, PROJECT_HOME=folder, ENV="LOCAL")
         config_file = Path(folder) / "site.ini"
-        config_file.write_text(f"[site]\norigin = {base}\nport = {port}\n")
+        config_file.write_text(f"[site]\norigin = {base}\nport = {port}\n[account]\nemail_hash_salt = http-test-salt\n")
         def start():
             proc = subprocess.Popen([sys.argv[1], str(ROOT / "main.tcl"), "--config", str(config_file)], env=env, cwd=folder, stdout=log, stderr=log)
             for _ in range(100):

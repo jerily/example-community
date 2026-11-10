@@ -8,17 +8,19 @@ LOCAL persists to SQLite; PROD uses PostgreSQL through `web-user::connect` and
 KSUIDs; session and recovery tokens use `twebserver::random_bytes`. Passwords use
 `bcrypt-tcl` at cost 12 (6-character minimum, 72 UTF-8 bytes maximum).
 
-The site pins `web-user` to `=0.1.5`, `web-forum` to `=0.1.6`, and `web-wiki`
+The site pins `web-user` to `=0.1.6`, `web-forum` to `=0.1.7`, and `web-wiki`
 and `web-blog` to `=0.1.2`, in `ttrek.json`. Forum topics and replies show their
 creation dates and times in UTC.
 
 ## Run locally
 
-Install and run the released site with ttrek:
+Create a private `site.ini` once, before starting the site. Generate a salt with
+`openssl rand -hex 32` and save that value as `[account] email_hash_salt`. Reuse
+the file across restarts; there is no default salt. Then install and run with ttrek:
 
 ```sh
-ttrek install -y example-community@0.1.7
-ENV=LOCAL ttrek run -package example-community -script start -- --port 8080
+ttrek install -y example-community@0.1.8
+ENV=LOCAL ttrek run -package example-community -script start -- --config /path/to/site.ini --port 8080
 ```
 
 For development, use Tcl 9.1 or newer and source checkouts of this site and
@@ -27,7 +29,7 @@ installed. Put the checkout directories and the native install prefix's `lib`
 directory on `TCLLIBPATH`, then run:
 
 ```sh
-ENV=LOCAL tclsh main.tcl --port 8080
+ENV=LOCAL tclsh main.tcl --config /path/to/site.ini --port 8080
 ```
 
 Open http://localhost:8080. Create an account, use the displayed LOCAL email code,
@@ -59,6 +61,7 @@ sqlite_path = data/community.sqlite3
 key_file = data/community.keyset
 
 [account]
+email_hash_salt = <paste the generated salt here>
 password_min_length = 6
 bcrypt_cost = 12
 collect_names = true
@@ -77,6 +80,11 @@ sets web-user policy; `[user]`, `[forum]`, `[wiki]` and `[blog]` supply each mou
 properties. `[server]` holds twebserver options and `[postgresql]` contains database
 connection properties such as `host`, `port`, `database`, `user`, `password` and
 `sslmode`. Omitted values keep the defaults from the bundled INI file.
+`email_hash_salt` is required in LOCAL and PROD. Encrypted tconfig deployments
+can supply `[account] enc:email_hash_salt`; the host decrypts it before creating
+the account store. Keep it stable alongside the keysets. Email and names are
+encrypted; email lookup uses a salted, keyed digest. This release requires a fresh
+account database; unsalted email indexes have no compatibility or migration path.
 
 The host loads persistent `aead`/`mac` keysets from `key_file` per worker; no secret
 is embedded in application code. Runtime data paths are relative to `PROJECT_HOME`
@@ -100,8 +108,8 @@ first name through web-user's reusable profile widget. Existing members can use
 **Your account → Edit profile**. Set the property to `false` to omit name collection.
 The host binds the widget in `library/site.tcl`; see the
 [shared widget contract](https://github.com/jerily/web-user/blob/main/WIDGETS.md).
-Run the explicit PROD `--initdb true` step when upgrading to create the additive
-profile table. LOCAL initialization does this automatically and preserves accounts.
+Run the explicit PROD `--initdb true` step to create the schema before serving.
+LOCAL initialization does this automatically.
 
 All verified members can create/edit wiki/blog content in this example. Replace
 the authorization callback in `library/site.tcl` for a different editorial policy.
