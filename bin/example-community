@@ -2,8 +2,8 @@
 set -eu
 # Locate the source checkout or installed package.
 site_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-if [ -f "$site_root/lib/example-community0.1.2/main.tcl" ]; then
-    site_root="$site_root/lib/example-community0.1.2"
+if [ -f "$site_root/lib/example-community0.1.3/main.tcl" ]; then
+    site_root="$site_root/lib/example-community0.1.3"
 fi
 if [ -n "${TCLSH:-}" ]; then
     exec "$TCLSH" "$site_root/main.tcl" "$@"

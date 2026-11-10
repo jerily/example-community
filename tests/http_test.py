@@ -15,7 +15,7 @@ import urllib.parse
 import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
-PASSWORD = "long community test password"
+PASSWORD = "grow42"
 
 def main():
     with socket.socket() as sock:
@@ -27,7 +27,10 @@ def main():
     def fetch(path, fields=None, status=200):
         data = None if fields is None else urllib.parse.urlencode(fields).encode()
         try:
-            response = client.open(base + path, data=data, timeout=15)
+            request = urllib.request.Request(base + path, data=data)
+            if data is not None:
+                request.add_header("Origin", base)
+            response = client.open(request, timeout=15)
         except urllib.error.HTTPError as error:
             response = error
         body = response.read().decode()
@@ -39,8 +42,10 @@ def main():
         return re.search(r'id="local-code">([^<]+)', body)[1]
     with tempfile.TemporaryDirectory() as folder, tempfile.TemporaryFile(mode="w+") as log:
         env = dict(os.environ, PROJECT_HOME=folder, ENV="LOCAL")
+        config_file = Path(folder) / "site.ini"
+        config_file.write_text(f"[site]\norigin = {base}\nport = {port}\n")
         def start():
-            proc = subprocess.Popen([sys.argv[1], str(ROOT / "main.tcl"), "--port", str(port)], env=env, cwd=folder, stdout=log, stderr=log)
+            proc = subprocess.Popen([sys.argv[1], str(ROOT / "main.tcl"), "--config", str(config_file)], env=env, cwd=folder, stdout=log, stderr=log)
             for _ in range(100):
                 if proc.poll() is not None:
                     log.seek(0)
@@ -64,6 +69,8 @@ def main():
             assert '/blog/_edit' not in fetch('/blog/2026-11-10-a-place-to-build-together')
             fetch("/wiki/_new", status=403)
             body = fetch("/user/register")
+            assert 'minlength="6"' in body
+            fetch("/user/register", dict(email="member@example.com", password="short", csrf=csrf(body)), status=400)
             body = fetch("/user/register", dict(email="member@example.com", password=PASSWORD, csrf=csrf(body)))
             body = fetch("/user/verify", dict(code=code(body), csrf=csrf(body)))
             body = fetch("/user/login", dict(email="member@example.com", password=PASSWORD, csrf=csrf(body)))
