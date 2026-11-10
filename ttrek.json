@@ -1,6 +1,6 @@
 {
   "name": "example-community",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "scripts": {
     "start": {
       "file": "start.sh"

@@ -14,12 +14,12 @@ creation dates and times in UTC.
 
 ## Run locally
 
-Create a private `site.ini` once, before starting the site. Generate a salt with
-`openssl rand -hex 32` and save that value as `[account] email_hash_salt`. Reuse
-the file across restarts; there is no default salt. Then install and run with ttrek:
+The bundled `config.ini` includes a sample `[account] email_hash_salt` for local
+development. For your own site, generate a salt with `openssl rand -hex 32`, save
+it in a private `site.ini`, and reuse the file across restarts. Install and run with ttrek:
 
 ```sh
-ttrek install -y example-community@0.1.8
+ttrek install -y example-community@0.1.9
 ENV=LOCAL ttrek run -package example-community -script start -- --config /path/to/site.ini --port 8080
 ```
 
