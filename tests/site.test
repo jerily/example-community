@@ -1,0 +1,15 @@
+package require tcltest
+package require example-community
+namespace import ::tcltest::*
+test site-1 {site config can override layout independently; PROD fails closed without database config} -body {
+    set ::env(ENV) LOCAL
+    set a [::community::settings master_template {<main>{% block body %}{% endblock %}</main>}]
+    set b [::community::settings]
+    set ::env(ENV) PROD
+    set result [list [expr {[dict get $a master_template] ne [dict get $b master_template]}] [catch {::web::user::connect {sqlite_path :memory:}}]]
+    set ::env(ENV) INVALID
+    lappend result [catch {::community::settings}]
+    set ::env(ENV) LOCAL
+    set result
+} -result {1 1 1}
+cleanupTests

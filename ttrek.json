@@ -1,0 +1,16 @@
+{
+  "name": "example-community",
+  "version": "0.1.0",
+  "scripts": {
+    "start": "exec \"$PROJECT_HOME/bin/example-community\" \"$@\""
+  },
+  "dependencies": {
+    "tcl": ">=8.6.0,<10.0.0",
+    "web-user": "0.1.0",
+    "web-forum": "0.1.0",
+    "twebserver": "^1.47.55",
+    "web-wiki": "0.1.0",
+    "web-blog": "0.1.0"
+  },
+  "devDependencies": {}
+}
