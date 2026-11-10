@@ -9,14 +9,14 @@ KSUIDs; session and recovery tokens use `twebserver::random_bytes`. Passwords us
 `bcrypt-tcl` at cost 12 (6-character minimum, 72 UTF-8 bytes maximum).
 
 The site pins `web-user` and `web-forum` to `=0.1.5`, and `web-wiki` and
-`web-blog` to `=0.1.1`, in `ttrek.json`.
+`web-blog` to `=0.1.2`, in `ttrek.json`.
 
 ## Run locally
 
 Install and run the released site with ttrek:
 
 ```sh
-ttrek install -y example-community@0.1.5
+ttrek install -y example-community@0.1.6
 ENV=LOCAL ttrek run -package example-community -script start -- --port 8080
 ```
 
