@@ -1,6 +1,6 @@
 {
   "name": "example-community",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "scripts": {
     "start": {
       "file": "start.sh"
@@ -8,8 +8,8 @@
   },
   "dependencies": {
     "tcl": ">=9.1.0,<10.0.0",
-    "web-user": "=0.1.4",
-    "web-forum": "=0.1.4",
+    "web-user": "=0.1.5",
+    "web-forum": "=0.1.5",
     "twebserver": "^1.47.56",
     "web-wiki": "=0.1.1",
     "web-blog": "=0.1.1",

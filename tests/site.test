@@ -104,4 +104,11 @@ test site-5 {tconfig decrypts deployment properties before adapting package sett
     unset ::configtest::keyset
 } -result {https://garden.example db 1 1}
 
+test site-6 {tconfig enables name collection and accepts a per-site override} -setup {
+    set filename [makeFile "\[account\]\ncollect_names = false\n" names.ini]
+} -body {
+    set ::env(ENV) LOCAL
+    list [dict get [::community::load_config] account collect_names] \
+        [dict get [::community::load_config $filename] account collect_names]
+} -cleanup {removeFile $filename} -result {1 0}
 cleanupTests

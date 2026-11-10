@@ -35,7 +35,9 @@ proc ::community::router {connection config keys} {
     set properties [site_properties $config]
     set shared [dict create master_template [dict get $config master_template] properties $properties]
     set auth [::web::user::mount $router -store $store -config [dict merge $shared [dict get $config user]]]
-    ::web::forum::mount $router -store $store -user $auth -config [dict merge $shared [dict get $config forum]]
+    set forumConfig [dict merge $shared [dict get $config forum]]
+    dict set forumConfig widgets profile [list ::web::user::widget $auth profile]
+    ::web::forum::mount $router -store $store -user $auth -config $forumConfig
     # Content packages receive these properties through their generic callback.
     dict unset shared properties
     foreach kind {wiki blog} {
