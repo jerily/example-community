@@ -70,8 +70,8 @@ def main():
             fetch("/wiki/_new", status=403)
             body = fetch("/user/register")
             assert 'minlength="6"' in body
-            fetch("/user/register", dict(email="member@example.com", password="short", csrf=csrf(body)), status=400)
-            body = fetch("/user/register", dict(email="member@example.com", password=PASSWORD, csrf=csrf(body)))
+            fetch("/user/register", dict(email="member@example.com", password="short", first_name="Mira", last_name="Fern", csrf=csrf(body)), status=400)
+            body = fetch("/user/register", dict(email="member@example.com", password=PASSWORD, first_name="Mira", last_name="Fern", csrf=csrf(body)))
             body = fetch("/user/verify", dict(code=code(body), csrf=csrf(body)))
             body = fetch("/user/login", dict(email="member@example.com", password=PASSWORD, csrf=csrf(body)))
             assert "Signed in as member@example.com" in body
@@ -90,6 +90,14 @@ def main():
             body = fetch("/forum/new")
             body = fetch("/forum/new", dict(title="First discussion", body="**Hello** <script>alert(1)</script>", csrf=csrf(body)))
             assert "First discussion" in body and "<strong>Hello</strong>" in body and "<script>alert" not in body
+            assert '<span class="user-profile">Mira</span>' in body and 'Fern' not in body
+            topic_path = html.unescape(re.search(r'<form method="post" action="([^"]+/topic/[^"]+)"', body)[1])
+            body = fetch(topic_path, dict(body="A reply", csrf=csrf(body)))
+            assert body.count('<span class="user-profile">Mira</span>') == 2
+            body = fetch('/user/profile')
+            fetch('/user/profile', dict(first_name="Rowan", last_name="Fern", csrf=csrf(body)))
+            assert fetch(topic_path).count('<span class="user-profile">Rowan</span>') == 2
+            assert '<span class="user-profile">Rowan</span>' in fetch('/forum')
             for kind in ("wiki", "blog"):
                 body = fetch(f"/{kind}/_new")
                 fields = dict(title="Community HTTP note", markdown="A persistent community note.", csrf=csrf(body))
@@ -107,6 +115,7 @@ def main():
             proc.wait(timeout=5)
             proc = start()
             assert "First discussion" in fetch("/forum")
+            assert '<span class="user-profile">Rowan</span>' in fetch("/forum")
             assert "A member improved our home page." in fetch("/")
             body = fetch("/user/login")
             body = fetch("/user/login", dict(email="member@example.com", password=PASSWORD, csrf=csrf(body)))
@@ -117,7 +126,7 @@ def main():
             fetch("/user/login", dict(email="member@example.com", password=PASSWORD, csrf=csrf(body)), status=401)
             body = fetch("/user/login", dict(email="member@example.com", password=PASSWORD + " updated", csrf=csrf(body)))
             assert "Signed in as" in body
-            print("HTTP checks passed: all mounts, signed cookies, login-aware controls, wiki-backed home, CSRF, reset and restart persistence.")
+            print("HTTP checks passed: all mounts, signed cookies, login-aware controls, wiki-backed home, CSRF, reset, shared profile widgets and restart persistence.")
         finally:
             if proc.poll() is None:
                 proc.send_signal(signal.SIGTERM)

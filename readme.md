@@ -8,7 +8,7 @@ LOCAL persists to SQLite; PROD uses PostgreSQL through `web-user::connect` and
 KSUIDs; session and recovery tokens use `twebserver::random_bytes`. Passwords use
 `bcrypt-tcl` at cost 12 (6-character minimum, 72 UTF-8 bytes maximum).
 
-The site pins `web-user` and `web-forum` to `=0.1.4`, and `web-wiki` and
+The site pins `web-user` and `web-forum` to `=0.1.5`, and `web-wiki` and
 `web-blog` to `=0.1.1`, in `ttrek.json`.
 
 ## Run locally
@@ -16,7 +16,7 @@ The site pins `web-user` and `web-forum` to `=0.1.4`, and `web-wiki` and
 Install and run the released site with ttrek:
 
 ```sh
-ttrek install -y example-community@0.1.4
+ttrek install -y example-community@0.1.5
 ENV=LOCAL ttrek run -package example-community -script start -- --port 8080
 ```
 
@@ -60,6 +60,7 @@ key_file = data/community.keyset
 [account]
 password_min_length = 6
 bcrypt_cost = 12
+collect_names = true
 
 [user]
 issuer = Juniper Yard
@@ -91,6 +92,15 @@ by wiki/blog/forum. Their editor assets remain owned by their own mounts.
 set config [::community::load_config /path/to/site.ini]
 ::community::serve $config
 ```
+
+`[account] collect_names = true` enables first/last name collection and the
+account profile-edit form. Names are encrypted at rest; the forum shows only the
+first name through web-user's reusable profile widget. Existing members can use
+**Your account → Edit profile**. Set the property to `false` to omit name collection.
+The host binds the widget in `library/site.tcl`; see the
+[shared widget contract](https://github.com/jerily/web-user/blob/main/WIDGETS.md).
+Run the explicit PROD `--initdb true` step when upgrading to create the additive
+profile table. LOCAL initialization does this automatically and preserves accounts.
 
 All verified members can create/edit wiki/blog content in this example. Replace
 the authorization callback in `library/site.tcl` for a different editorial policy.
