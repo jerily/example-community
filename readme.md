@@ -15,13 +15,29 @@ creation dates and times in UTC.
 
 ## Run locally
 
-The bundled `config.ini` includes a sample `[account] email_hash_salt` for local
-development. For your own site, generate a salt with `openssl rand -hex 32`, save
-it in a private `site.ini`, and reuse the file across restarts. Install and run with ttrek:
+From a cloned source package:
 
 ```sh
-ttrek install -y example-community@0.2.1
-ENV=LOCAL ttrek run -package example-community -script start -- --config /path/to/site.ini --port 8080
+ttrek clone example-community -outdir my-community
+cd my-community
+ttrek install -y
+ttrek run -script start
+```
+
+Command-line startup defaults to `ENV=LOCAL` when `ENV` is unset. An explicit
+`ENV=PROD` still requires production configuration; other values are rejected.
+The project script runs the launcher in the cloned source, so edits to that
+source take effect after restarting. Pass options after `--`, for example
+`ttrek run -script start -- --port 8081`.
+
+The bundled `config.ini` includes a sample `[account] email_hash_salt` for local
+development. For your own site, generate a salt with `openssl rand -hex 32`, save
+it in a private `site.ini`, and reuse the file across restarts. You can also install
+the example as a dependency in an initialized ttrek project:
+
+```sh
+ttrek install -y example-community@0.2.2
+ttrek run -package example-community -script start -- --config /path/to/site.ini --port 8080
 ```
 
 For development, use Tcl 9.1 or newer and source checkouts of this site and
@@ -30,7 +46,7 @@ installed. Put the checkout directories and the native install prefix's `lib`
 directory on `TCLLIBPATH`, then run:
 
 ```sh
-ENV=LOCAL tclsh main.tcl --config /path/to/site.ini --port 8080
+tclsh main.tcl --config /path/to/site.ini --port 8080
 ```
 
 Open http://localhost:8080. Create an account, use the displayed LOCAL email code,
@@ -138,7 +154,8 @@ for hosts that do not pass a callback. Authorization and CSRF remain independent
 server-side checks. The home template uses the same property for its edit link.
 
 The package manifest uses `scripts.start.file: start.sh`. The script launches
-the installed command using `PROJECT_INSTALL_DIR`.
+the source command using `PROJECT_HOME`. The registry recipe supplies a separate
+package script that launches the installed command using `PROJECT_INSTALL_DIR`.
 
 ## Production
 
@@ -190,10 +207,12 @@ is no production publishing/deployment step in this example package.
 
 ```sh
 ENV=LOCAL tclsh tests/all.tcl
-ENV=LOCAL python3 tests/http_test.py /path/to/tclsh
+python3 tests/http_test.py /path/to/tclsh
 ```
 
 HTTP checks start/stop a temporary loopback server and temporary SQLite database.
+They launch the source `start.sh` without `ENV` or an installed site launcher,
+and check that explicit production and invalid modes still fail closed.
 They cover all four mounts, shared master templates, registration/login/recovery,
 forum Markdown rendering and XSS prevention, wiki/blog writes through web-user callbacks, rejected CSRF and
 session revocation, and data/key persistence across server restarts. The web-user

@@ -1,3 +1,3 @@
 #!/bin/sh
 set -eu
-exec "$PROJECT_INSTALL_DIR/bin/example-community" "$@"
+exec "$PROJECT_HOME/bin/example-community" "$@"

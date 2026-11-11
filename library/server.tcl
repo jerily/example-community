@@ -40,8 +40,11 @@ proc ::community::serve {config {initialize 0}} {
     } finally {::twebserver::destroy_server $server}
 }
 proc ::community::main {arguments} {
+    # The example is local by default; keep explicit deployment modes intact.
+    if {![info exists ::env(ENV)]} {set ::env(ENV) LOCAL}
     if {$arguments eq {--help}} {
-        puts {ENV=LOCAL example-community --config site.ini [--port 8080] [--initdb true]
+        puts {example-community [--config site.ini] [--port 8080] [--initdb true]
+ENV defaults to LOCAL when unset. Set ENV=PROD explicitly for deployment.
 Configuration uses tconfig INI files; encrypted values use AWS KMS.
 Both environments require [account] email_hash_salt in the config file.
 ENV=PROD requires --config with an HTTPS site origin, key_file and PostgreSQL settings.

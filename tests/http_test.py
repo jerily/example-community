@@ -19,6 +19,13 @@ PASSWORD = "grow42"
 
 def main():
     password = PASSWORD
+    # An explicit production or invalid mode must not fall back to LOCAL.
+    for mode, message in [("PROD", "ENV=PROD requires --config"),
+                          ("INVALID", "ENV must be LOCAL or PROD"),
+                          ("", "ENV must be LOCAL or PROD")]:
+        result = subprocess.run([sys.argv[1], str(ROOT / "main.tcl")],
+                                env=dict(os.environ, ENV=mode), capture_output=True, text=True, timeout=15)
+        assert result.returncode != 0 and message in result.stderr, (mode, result.stderr)
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
         port = sock.getsockname()[1]
@@ -42,11 +49,17 @@ def main():
     def code(body):
         return re.search(r'id="local-code">([^<]+)', body)[1]
     with tempfile.TemporaryDirectory() as folder, tempfile.TemporaryFile(mode="w+") as log:
-        env = dict(os.environ, PROJECT_HOME=folder, ENV="LOCAL")
+        # Start exactly the source script used by `ttrek run -script start`.
+        # There is deliberately no installed example-community launcher.
+        env = dict(os.environ, PROJECT_HOME=str(ROOT), TCLSH=sys.argv[1],
+                   PROJECT_INSTALL_DIR=str(Path(folder) / "uninstalled"))
+        env.pop("ENV", None)
         config_file = Path(folder) / "site.ini"
-        config_file.write_text(f"[site]\norigin = {base}\nport = {port}\n[account]\nemail_hash_salt = http-test-salt\n")
+        config_file.write_text(f"[site]\norigin = {base}\nport = {port}\n"
+                               f"sqlite_path = {folder}/community.sqlite3\nkey_file = {folder}/community.keyset\n"
+                               "[account]\nemail_hash_salt = http-test-salt\n")
         def start():
-            proc = subprocess.Popen([sys.argv[1], str(ROOT / "main.tcl"), "--config", str(config_file)], env=env, cwd=folder, stdout=log, stderr=log)
+            proc = subprocess.Popen([str(ROOT / "start.sh"), "--config", str(config_file)], env=env, cwd=folder, stdout=log, stderr=log)
             for _ in range(100):
                 if proc.poll() is not None:
                     log.seek(0)
