@@ -9,8 +9,8 @@ PostgreSQL (`tsession-postgres`) through `web-user::connect` and
 KSUIDs; session and recovery tokens use `twebserver::random_bytes`. Passwords use
 `bcrypt-tcl` at cost 12 (6-character minimum, 72 UTF-8 bytes maximum).
 
-The site pins `web-user` to `=0.2.0`, `web-forum` to `=0.1.8`, and `web-wiki`
-and `web-blog` to `=0.1.2`, in `ttrek.json`. Forum topics and replies show their
+The site pins `web-user` to `=0.2.1`, `web-forum` to `=0.1.9`, and `web-wiki`
+and `web-blog` to `=0.1.3`, in `ttrek.json`. Forum topics and replies show their
 creation dates and times in UTC.
 
 ## Run locally
@@ -20,7 +20,7 @@ development. For your own site, generate a salt with `openssl rand -hex 32`, sav
 it in a private `site.ini`, and reuse the file across restarts. Install and run with ttrek:
 
 ```sh
-ttrek install -y example-community@0.2.0
+ttrek install -y example-community@0.2.1
 ENV=LOCAL ttrek run -package example-community -script start -- --config /path/to/site.ini --port 8080
 ```
 
@@ -200,3 +200,8 @@ session revocation, and data/key persistence across server restarts. The web-use
 suite separately exercises both SQLite and optional PostgreSQL, MFA and replay.
 See [web-user mounting documentation](https://github.com/jerily/web-user/blob/main/MOUNTING.md) for the reusable
 package-to-site contract (installed as part of web-user as well).
+
+Database access in all mounted packages and SQL session stores uses `tpersist`.
+See [database indexes](docs/database-indexes.md) for the access-path inventory
+and the SQLite/PostgreSQL EXPLAIN audit. Rerun explicit initialization to create
+new indexes in an existing database before serving with this release.

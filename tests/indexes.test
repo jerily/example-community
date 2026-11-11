@@ -1,0 +1,194 @@
+# Execute the packages' real access paths, then EXPLAIN their compiled/bound SQL.
+# No planner settings are changed. Several domains keep the fixtures selective.
+package require tcltest
+package require example-community
+namespace import ::tcltest::*
+namespace eval ::indexaudit {namespace import ::tpersist::db_*}
+testConstraint index_postgres [info exists ::env(INDEX_TEST_PG)]
+
+proc ::indexaudit::raw {sql {params {}} {types {}}} {
+    variable db
+    set driver [dict get [::tpersist::_connection $db] command]
+    set statement [$driver prepare $sql]
+    try {
+        dict for {name type} $types {
+            if {$type eq "auto"} continue
+            $statement paramtype $name [dict get {text varchar bigint bigint integer bigint boolean bit} $type]
+        }
+        set result [$statement execute $params]
+        try {return [$result allrows -as dicts]} finally {$result close}
+    } finally {$statement close}
+}
+
+proc ::indexaudit::setup {backend} {
+    variable db
+    variable dialect $backend
+    variable schema
+    variable handles
+    variable userStore
+    variable wiki
+    variable blog
+    variable sessions
+    variable plans {}
+    set ::env(ENV) [expr {$backend eq "sqlite" ? "LOCAL" : "PROD"}]
+    if {$backend eq "sqlite"} {
+        set db [db_connect -database :memory: -autobegin 0]
+    } else {
+        set db [db_connect -dialect postgresql -autobegin 0 {*}$::env(INDEX_TEST_PG)]
+        set schema index_audit_[pid]_[clock clicks]
+        raw "CREATE SCHEMA $schema"
+        raw "SET search_path TO $schema"
+    }
+    foreach package {user forum wiki blog} {
+        ::web::${package}::initdb $db
+        ::web::${package}::initdb $db
+    }
+    set handles [list [::tink::register_keyset [::tink::aead::create_keyset AES256_GCM]] \
+        [::tink::register_keyset [::tink::mac::create_keyset HMAC_SHA256]]]
+    set userStore [::web::user::create -connection $db -config [dict create \
+        tenant audit-00 email_hash_salt index-test aead [lindex $handles 0] mac [lindex $handles 1]]]
+    set wiki [::web::wiki::create -connection $db -domain audit-00]
+    set blog [::web::blog::create -connection $db -domain audit-00]
+    set sessions [dict get $userStore -sessions]
+    seed
+    raw ANALYZE
+}
+
+proc ::indexaudit::seed {} {
+    variable db
+    variable userStore
+    set emailKey [::web::user::email_key $userStore member@example.com]
+    set future [expr {[clock seconds]+3600}]
+    set body [string repeat {sample content } 30]
+    set tables {
+        web_user_users {tenant id email_key email password verified mfa_secret last_step revision created_at}
+        web_user_profiles {tenant id first_name last_name}
+        web_user_limits {tenant id hits expires}
+        tsession_sessions {tenant id subject expires data revision}
+        web_forum_topics {tenant id author title body created_at}
+        web_forum_replies {tenant id topic author body created_at}
+        web_wiki_items {domain path parent_path item_type title markdown source_path source_markdown revision active updated_at}
+        web_wiki_revisions {domain path revision title markdown created_at}
+        web_blog_items {domain path parent_path item_type title markdown source_path source_markdown published_at revision active updated_at}
+        web_blog_revisions {domain path revision title markdown created_at}
+    }
+    db_transaction $db {
+        dict for {table columns} $tables {
+            set values {}
+            foreach column $columns {
+                # Avoid assumptions about driver inference for boolean fields.
+                set type [expr {$column in {active verified} ? "boolean" : ($column in {last_step revision created_at hits expires} && ![string match *_revisions $table] ? "bigint" : "text")}]
+                if {[string match *_revisions $table] && $column eq "revision"} {set type bigint}
+                dict set values $column [db_param $column -type $type]
+            }
+            set query [db_values [db_insert $table] $values -expressions]
+            set compiled [db_compile $query -dialect [db_dialect $db]]
+            set driver [dict get [::tpersist::_connection $db] command]
+            set statement [$driver prepare [dict get $compiled sql]]
+            try {
+                dict for {name type} [dict get $compiled types] {
+                    $statement paramtype $name [dict get {text varchar bigint bigint boolean bit} $type]
+                }
+                for {set tenant 0} {$tenant < 32} {incr tenant} {
+                    for {set i 0} {$i < 64} {incr i} {
+                        set scope [format audit-%02d $tenant]
+                        set id [format id-%03d $i]
+                        set expires [expr {$i < 2 ? 0 : $future}]
+                        set row [dict create tenant $scope domain $scope id $id email_key [expr {$i == 42 ? $emailKey : "email-$id"}] \
+                            email encrypted password unused verified 1 mfa_secret {} last_step -1 revision 1 \
+                            created_at [expr {$i/4}] first_name encrypted last_name encrypted hits 1 expires $expires \
+                            subject user-[expr {$i%16}] data [dict create expires $expires note $body] author $id \
+                            title "Title $i" body $body topic [format id-%03d [expr {$i%8}]] \
+                            path [format /p-%03d $i] parent_path /folder-[expr {$i%8}] item_type page \
+                            markdown $body source_path imported source_markdown $body published_at [format 2026-01-%02d [expr {$i%28+1}]] \
+                            active [expr {$i%5 != 0}] updated_at 2026-01-01T00:00:00Z]
+                        if {[string match *_revisions $table]} {
+                            dict set row path [format /p-%03d [expr {$i/4}]]
+                            dict set row revision [expr {$i%4+1}]
+                            dict set row created_at 2026-01-01T00:00:00Z
+                        }
+                        set parameters {}
+                        foreach column $columns {dict set parameters $column [dict get $row $column]}
+                        set bound [db_compile $query -dialect [db_dialect $db] -params $parameters]
+                        set result [$statement execute [dict get $bound params]]
+                        $result close
+                    }
+                }
+            } finally {$statement close}
+        }
+    }
+}
+
+proc ::indexaudit::capture {command operation} {
+    variable queries
+    lappend queries [lindex $command 2]
+}
+proc ::indexaudit::check {label script expected {ordered 0}} {
+    variable db
+    variable queries {}
+    variable plans
+    trace add execution ::tpersist::db_execute enter ::indexaudit::capture
+    try {uplevel 1 $script} finally {trace remove execution ::tpersist::db_execute enter ::indexaudit::capture}
+    if {[llength $queries] != [llength $expected]} {error "$label: unexpected query count [llength $queries]"}
+    foreach query $queries index $expected {
+        set dialect [db_dialect $db]
+        set compiled [db_compile $query -dialect $dialect]
+        set prefix [expr {$dialect eq "sqlite" ? "EXPLAIN QUERY PLAN " : "EXPLAIN "}]
+        set rows [raw $prefix[dict get $compiled sql] [dict get $compiled params] [dict get $compiled types]]
+        set plan [join [lmap row $rows {join [dict values $row] { }}] \n]
+        if {![regexp -nocase {using (covering )?index|index( only)? scan} $plan] || ![string match *$index* $plan]} {error "$label: expected index $index; got $plan"}
+        # SQLite's plan is deterministic here; PostgreSQL may reasonably choose
+        # bitmap access plus sorting even when a matching ordered index exists.
+        if {$ordered && $dialect eq "sqlite" && [string match {*TEMP B-TREE*} $plan]} {error "$label: unexpected sort: $plan"}
+        lappend plans [list $label $plan]
+    }
+}
+proc ::indexaudit::run {} {
+    variable userStore
+    variable wiki
+    variable blog
+    variable sessions
+    variable plans
+    check user-id {::web::user::user_by_id $userStore id-042} {web_user_users}
+    check user-email {::web::user::user_by_email $userStore member@example.com} {web_user_users}
+    check user-profile {::web::user::one $userStore web_user_profiles {id id-042}} {web_user_profiles}
+    check throttle-counter {::web::user::one $userStore web_user_limits {id id-042}} {web_user_limits}
+    check session-id {::tsession::sql::get $sessions id-042} {tsession_sessions}
+    check session-revoke {::tsession::sql::revoke $sessions user-15} {tsession_subject}
+    check expiry-prune {::web::user::prune $userStore} {tsession_expiry web_user_limits_expiry}
+    check topic-id {::web::user::one $userStore web_forum_topics {id id-042}} {web_forum_topics}
+    check recent-topics {::web::forum::list_rows $userStore web_forum_topics {} 10} {web_forum_topics_recent} 1
+    check topic-replies {::web::forum::list_rows $userStore web_forum_replies {topic id-002} 10} {web_forum_replies_topic_recent} 1
+    foreach kind {wiki blog} {
+        set store [set $kind]
+        check $kind-page [list ::web::${kind}::load $store /p-042] [list web_${kind}_items]
+        check $kind-inactive-page [list ::web::${kind}::load $store /p-040 1] [list web_${kind}_items]
+        check $kind-folder [list ::web::${kind}::children $store /folder-2] [list web_${kind}_children]
+        check $kind-history [list ::web::${kind}::history $store /p-010] [list web_${kind}_revisions] 1
+        # The same domain-scoped full read used by content synchronization.
+        check $kind-sync [list ::web::${kind}::execute $store [db_select web_${kind}_items]] [list web_${kind}_]
+    }
+    check blog-posts {::web::blog::posts $blog} {web_blog_posts} 1
+    if {[info exists ::env(INDEX_PLAN_DIR)]} {
+        set file [open [file join $::env(INDEX_PLAN_DIR) plans-[db_dialect $::indexaudit::db].txt] w]
+        try {foreach entry $plans {puts $file [join $entry \n]}} finally {close $file}
+    }
+    return [llength $plans]
+}
+proc ::indexaudit::cleanup {} {
+    variable db
+    variable dialect
+    variable schema
+    variable handles
+    if {$dialect eq "postgresql"} {raw "DROP SCHEMA $schema CASCADE"}
+    db_disconnect $db
+    if {[info exists handles]} {foreach h $handles {::tink::unregister_keyset $h}}
+    set ::env(ENV) LOCAL
+}
+foreach backend {sqlite postgresql} {
+    test indexes-$backend {all package retrieval paths use their intended indexes} \
+        -constraints [expr {$backend eq "postgresql" ? "index_postgres" : {}}] \
+        -setup {::indexaudit::setup $backend} -body {::indexaudit::run} \
+        -cleanup {::indexaudit::cleanup} -result 22
+}
+cleanupTests
