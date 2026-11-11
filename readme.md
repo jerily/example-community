@@ -3,12 +3,13 @@
 Juniper Yard is a fictional neighborhood garden and workshop in Alderwick: a runnable Tcl community site with one shared Jinja master template and four
 mounted packages: `/user` (accounts), `/forum` (discussions), `/wiki` (shared
 handbook), and `/blog` (journal). The host passes per-request template properties to `web-wiki` and `web-blog`.
-LOCAL persists to SQLite; PROD uses PostgreSQL through `web-user::connect` and
+LOCAL persists accounts and sessions to SQLite (`tsession-sqlite`); PROD uses
+PostgreSQL (`tsession-postgres`) through `web-user::connect` and
 `tpersist`. All ordinary record IDs introduced by the account/forum packages are
 KSUIDs; session and recovery tokens use `twebserver::random_bytes`. Passwords use
 `bcrypt-tcl` at cost 12 (6-character minimum, 72 UTF-8 bytes maximum).
 
-The site pins `web-user` to `=0.1.6`, `web-forum` to `=0.1.7`, and `web-wiki`
+The site pins `web-user` to `=0.2.0`, `web-forum` to `=0.1.8`, and `web-wiki`
 and `web-blog` to `=0.1.2`, in `ttrek.json`. Forum topics and replies show their
 creation dates and times in UTC.
 
@@ -19,7 +20,7 @@ development. For your own site, generate a salt with `openssl rand -hex 32`, sav
 it in a private `site.ini`, and reuse the file across restarts. Install and run with ttrek:
 
 ```sh
-ttrek install -y example-community@0.1.9
+ttrek install -y example-community@0.2.0
 ENV=LOCAL ttrek run -package example-community -script start -- --config /path/to/site.ini --port 8080
 ```
 
@@ -34,7 +35,10 @@ ENV=LOCAL tclsh main.tcl --config /path/to/site.ini --port 8080
 
 Open http://localhost:8080. Create an account, use the displayed LOCAL email code,
 sign in, and enable an authenticator from Account. LOCAL also displays reset and
-current TOTP codes. Email delivery is a TODO in web-user. Account/recovery codes
+current TOTP codes. From Account, choose **Change password** to confirm the
+current password and set a new one. It signs out other sessions and preserves
+MFA; the account routes and forms are supplied by web-user. SES email is opt-in
+in PROD and remains off in LOCAL. Account/recovery codes
 remain subject to expiry and replay checks. Site runtime data stays under the
 consuming project's `data/`, outside installed package directories.
 
@@ -159,9 +163,28 @@ ENV=PROD tclsh main.tcl --config production.ini
 ```
 
 PROD startup validates routes/keys/configuration and does not create schema.
-Set the `deliver` command prefix in the `[user]` section before enabling real email
-registration/recovery. The default intentionally sends nothing. There is no
-production publishing/deployment step in this example package.
+Enable account email in the private deployment INI when desired:
+
+```ini
+[user]
+email_enabled = true
+email_from = accounts@example.com
+email_region = us-east-1
+```
+
+`aws-sdk-tcl-ses` uses the AWS credential provider chain. Configure the sender
+identity and sending permissions in that region. Enabled PROD delivery sends
+email confirmation/recovery codes, authenticator enabled/disabled notices, and
+password-change notices (including resets). Passwords and authenticator secrets
+are never emailed. `email_enabled` defaults to false; when off, PROD has no
+verification/recovery email delivery. LOCAL continues showing development codes
+and never calls SES. An optional `deliver` callback can override transport.
+
+Delivery follows the account transaction. Failures produce a generic server log
+and preserve the successful account change/cookie; there is no persistent email
+queue or application retry worker. Monitor delivery failures. Session schema
+initialization creates `tsession_sessions`; no old sessions are migrated. There
+is no production publishing/deployment step in this example package.
 
 ## Verification
 

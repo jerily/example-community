@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PASSWORD = "grow42"
 
 def main():
+    password = PASSWORD
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
         port = sock.getsockname()[1]
@@ -71,10 +72,23 @@ def main():
             body = fetch("/user/register")
             assert 'minlength="6"' in body
             fetch("/user/register", dict(email="member@example.com", password="short", first_name="Mira", last_name="Fern", csrf=csrf(body)), status=400)
-            body = fetch("/user/register", dict(email="member@example.com", password=PASSWORD, first_name="Mira", last_name="Fern", csrf=csrf(body)))
+            body = fetch("/user/register", dict(email="member@example.com", password=password, first_name="Mira", last_name="Fern", csrf=csrf(body)))
             body = fetch("/user/verify", dict(code=code(body), csrf=csrf(body)))
-            body = fetch("/user/login", dict(email="member@example.com", password=PASSWORD, csrf=csrf(body)))
+            body = fetch("/user/login", dict(email="member@example.com", password=password, csrf=csrf(body)))
             assert "Signed in as member@example.com" in body
+            assert '/user/change-password' in body
+            body = fetch('/user/change-password')
+            assert 'minlength="6"' in body and 'name="current_password"' in body
+            next_password = password + " changed"
+            fetch('/user/change-password', dict(current_password="wrong", password=next_password, confirm_password=next_password, csrf=csrf(body)), status=401)
+            body = fetch('/user/change-password', dict(current_password=password, password=next_password, confirm_password=next_password, csrf=csrf(body)))
+            assert "Password changed" in body and "Signed in as" in body
+            password = next_password
+            # A live authenticated session survives a server/connection restart.
+            proc.send_signal(signal.SIGTERM)
+            proc.wait(timeout=5)
+            proc = start()
+            assert "Signed in as member@example.com" in fetch('/user')
             for kind in ("wiki", "blog"):
                 assert f'/{kind}/_new' in fetch(f'/{kind}')
             assert '/wiki/_edit' in fetch('/wiki/community-handbook')
@@ -118,15 +132,15 @@ def main():
             assert '<span class="user-profile">Rowan</span>' in fetch("/forum")
             assert "A member improved our home page." in fetch("/")
             body = fetch("/user/login")
-            body = fetch("/user/login", dict(email="member@example.com", password=PASSWORD, csrf=csrf(body)))
+            body = fetch("/user/login", dict(email="member@example.com", password=password, csrf=csrf(body)))
             assert "Signed in as member@example.com" in body
             body = fetch("/user/forgot", dict(email="member@example.com", csrf=csrf(body)))
-            body = fetch("/user/reset", dict(code=code(body), password=PASSWORD + " updated", csrf=csrf(body)))
+            body = fetch("/user/reset", dict(code=code(body), password=password + " updated", csrf=csrf(body)))
             assert "Password changed" in body
-            fetch("/user/login", dict(email="member@example.com", password=PASSWORD, csrf=csrf(body)), status=401)
-            body = fetch("/user/login", dict(email="member@example.com", password=PASSWORD + " updated", csrf=csrf(body)))
+            fetch("/user/login", dict(email="member@example.com", password=password, csrf=csrf(body)), status=401)
+            body = fetch("/user/login", dict(email="member@example.com", password=password + " updated", csrf=csrf(body)))
             assert "Signed in as" in body
-            print("HTTP checks passed: all mounts, signed cookies, login-aware controls, wiki-backed home, CSRF, reset, shared profile widgets and restart persistence.")
+            print("HTTP checks passed: all mounts, signed cookies, login-aware controls, wiki-backed home, CSRF, change password, reset, shared profile widgets and authenticated restart persistence.")
         finally:
             if proc.poll() is None:
                 proc.send_signal(signal.SIGTERM)
