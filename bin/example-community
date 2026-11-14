@@ -2,8 +2,21 @@
 set -eu
 # Locate the source checkout or installed package.
 site_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-if [ -f "$site_root/lib/example-community0.2.2/main.tcl" ]; then
-    site_root="$site_root/lib/example-community0.2.2"
+if [ ! -f "$site_root/main.tcl" ]; then
+    package_root=
+    for candidate in "$site_root"/lib/example-community*/main.tcl; do
+        [ -f "$candidate" ] || continue
+        if [ -n "$package_root" ]; then
+            echo "Multiple example-community installations found under $site_root/lib." >&2
+            exit 1
+        fi
+        package_root=${candidate%/main.tcl}
+    done
+    if [ -z "$package_root" ]; then
+        echo "Cannot find example-community's main.tcl under $site_root." >&2
+        exit 1
+    fi
+    site_root=$package_root
 fi
 if [ -n "${TCLSH:-}" ]; then
     exec "$TCLSH" "$site_root/main.tcl" "$@"

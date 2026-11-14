@@ -156,6 +156,9 @@ server-side checks. The home template uses the same property for its edit link.
 The package manifest uses `scripts.start.file: start.sh`. The script launches
 the source command using `PROJECT_HOME`. The registry recipe supplies a separate
 package script that launches the installed command using `PROJECT_INSTALL_DIR`.
+The launcher uses the checkout's `main.tcl` when present, otherwise discovers it
+under `lib/example-community*` without a fixed package version. It reports a
+missing or ambiguous installation instead of choosing an arbitrary directory.
 
 ## Production
 

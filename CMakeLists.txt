@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(example-community VERSION 0.2.3 LANGUAGES NONE)
+project(example-community VERSION 0.2.4 LANGUAGES NONE)
 set(PACKAGE_DIR "lib/example-community${PROJECT_VERSION}")
 install(FILES pkgIndex.tcl readme.md config.ini LICENSE start.sh DESTINATION "${PACKAGE_DIR}")
 install(DIRECTORY library assets docs DESTINATION "${PACKAGE_DIR}")
