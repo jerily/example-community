@@ -1,18 +1,19 @@
 {
   "name": "example-community",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "scripts": {
     "start": {
       "file": "start.sh"
     }
   },
   "dependencies": {
+    "tpersist": "^0.1.4",
     "tcl": ">=9.1.0,<10.0.0",
-    "web-user": "=0.2.1",
-    "web-forum": "=0.1.9",
+    "web-user": "=0.2.3",
+    "web-forum": "=0.1.11",
     "twebserver": "^1.47.56",
-    "web-wiki": "=0.1.3",
-    "web-blog": "=0.1.3",
+    "web-wiki": "=0.1.4",
+    "web-blog": "=0.1.4",
     "tconfig": "1.0.0"
   },
   "devDependencies": {}
