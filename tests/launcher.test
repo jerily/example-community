@@ -1,0 +1,75 @@
+package require tcltest
+namespace import ::tcltest::*
+
+namespace eval ::launchertest {
+    variable launcher [file join [file dirname [file dirname [file normalize [info script]]]] bin example-community]
+}
+
+proc ::launchertest::layout {} {
+    variable launcher
+    set root [makeDirectory {launcher fixture ' $}]
+    file mkdir [file join $root bin]
+    file copy $launcher [file join $root bin example-community]
+    return $root
+}
+
+proc ::launchertest::entry {directory label} {
+    file mkdir $directory
+    set channel [open [file join $directory main.tcl] w]
+    puts $channel [list puts $label]
+    puts $channel {puts $argv}
+    close $channel
+}
+
+proc ::launchertest::run {root args} {
+    exec env TCLSH=[info nameofexecutable] [file join $root bin example-community] {*}$args
+}
+
+test launcher-1 {source checkout takes precedence over installed copies} -setup {
+    set root [::launchertest::layout]
+    ::launchertest::entry $root source
+    ::launchertest::entry [file join $root lib example-community99.0.0] installed
+} -body {
+    ::launchertest::run $root --config {site config.ini}
+} -cleanup {removeDirectory $root} -result "source\n--config {site config.ini}"
+
+test launcher-2 {installed entry point is discovered without a fixed version} -setup {
+    set root [::launchertest::layout]
+} -body {
+    set results {}
+    foreach name {example-community0.2.3 example-community7.12.4 example-community} {
+        set package [file join $root lib $name]
+        ::launchertest::entry $package $name
+        lappend results [::launchertest::run $root --help]
+        file delete -force $package
+    }
+    set results
+} -cleanup {removeDirectory $root} -result [list \
+    "example-community0.2.3\n--help" "example-community7.12.4\n--help" "example-community\n--help"]
+
+test launcher-3 {directories without an entry point are ignored} -setup {
+    set root [::launchertest::layout]
+    file mkdir [file join $root lib example-community-old]
+    ::launchertest::entry [file join $root lib example-community7.12.4] installed
+} -body {
+    ::launchertest::run $root --help
+} -cleanup {removeDirectory $root} -result "installed\n--help"
+
+test launcher-4 {missing installation has a clear diagnostic} -setup {
+    set root [::launchertest::layout]
+} -body {
+    list [catch {::launchertest::run $root} message] \
+        [string match {*Cannot find example-community's main.tcl*} $message]
+} -cleanup {removeDirectory $root} -result {1 1}
+
+test launcher-5 {multiple installations are rejected instead of choosing an arbitrary version} -setup {
+    set root [::launchertest::layout]
+    ::launchertest::entry [file join $root lib example-community2.0.0] older
+    ::launchertest::entry [file join $root lib example-community10.0.0] newer
+} -body {
+    list [catch {::launchertest::run $root} message] \
+        [string match {*Multiple example-community installations*} $message]
+} -cleanup {removeDirectory $root} -result {1 1}
+
+namespace delete ::launchertest
+cleanupTests

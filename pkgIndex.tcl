@@ -3,4 +3,4 @@
 # SPDX-License-Identifier: MIT.
 
 # Register the package and load its dependencies.
-package ifneeded example-community 0.2.3 [list source [file join $dir library example-community.tcl]]
+package ifneeded example-community 0.2.4 [list source [file join $dir library example-community.tcl]]
