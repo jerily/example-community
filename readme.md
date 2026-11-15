@@ -6,10 +6,10 @@ handbook), and `/blog` (journal). The host passes per-request template propertie
 LOCAL persists accounts and sessions to SQLite (`tsession-sqlite`); PROD uses
 PostgreSQL (`tsession-postgres`) through `web-user::connect` and
 `tpersist`. All ordinary record IDs introduced by the account/forum packages are
-KSUIDs; session and recovery tokens use `twebserver::random_bytes`. Passwords use
+prefixed KSUIDs (`user_`, `topic_`, `reply_`, `moderation_`); session and recovery tokens use `twebserver::random_bytes`. Passwords use
 `bcrypt-tcl` at cost 12 (6-character minimum, 72 UTF-8 bytes maximum).
 
-The site pins `web-user` to `=0.5.0`, `web-forum` to `=0.2.0`, and `web-wiki`
+The site pins `web-user` to `=0.5.0`, `web-forum` to `=0.3.0`, and `web-wiki`
 and `web-blog` to `=0.1.5` in `ttrek.json`. The Tcl runtime also requires exactly
 `web-user` 0.5.0. Forum topics and replies show their creation dates and times in UTC.
 
@@ -257,7 +257,9 @@ access for existing sessions too. This applies in both LOCAL and PROD; run
 `--initdb true` to initialize the database before first PROD startup.
 
 Administrators with `users.manage` see **Your account → Manage users**. The
-directory shows registration times, authenticator status and configured groups.
+directory shows registration, last sign-in and last visit times, authenticator
+status and configured groups. Choose **Recently signed in**, **Recently active**,
+or **Newest registrations** to sort it.
 It is private to that permission and lists all accounts across pages.
 
 An editor may create and edit notebook pages and journal posts. Grant only

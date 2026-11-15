@@ -4,7 +4,7 @@
 
 # Register the package and load its dependencies.
 package require -exact web-user 0.5.0
-package require web-forum 0.2.0
+package require web-forum 0.3.0
 package require web-wiki 0.1.5
 package require web-blog 0.1.5
 package require -exact web-static-wiki 0.1.8

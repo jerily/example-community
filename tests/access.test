@@ -17,7 +17,7 @@ proc ::contentaccess::setup {} {
 proc ::contentaccess::member {email} {
     variable store
     variable auth
-    set uid [ksuid::generate_ksuid]
+    set uid user_[ksuid::generate_ksuid]
     ::web::user::insert $store web_user_users [dict create id $uid active 1 verified 1 \
         email_key [::web::user::email_key $store $email] email [::web::user::seal $store $email [list email $uid]] \
         password unused mfa_secret {} last_step -1 revision 0 created_at 1]
