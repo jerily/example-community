@@ -9,7 +9,7 @@ package require web-wiki 0.1.5
 package require web-blog 0.1.5
 package require -exact web-static-wiki 0.1.8
 package require tpathexp 1.2.0
-package require twebserver 1.47.57
+package require twebserver 1.47.58
 package require tconfig::decrypt 1.0.0
 namespace eval ::community {variable root [file dirname [file dirname [info script]]]}
 foreach module {config site server} {source [file join $::community::root library $module.tcl]}
