@@ -10,12 +10,14 @@
   "dependencies": {
     "tpersist": "^0.1.4",
     "tcl": ">=9.1.0,<10.0.0",
-    "web-user": "=0.4.0",
-    "web-forum": "=0.1.11",
+    "web-user": "=0.5.0",
+    "web-forum": "=0.2.0",
     "twebserver": "^1.47.57",
-    "web-wiki": "=0.1.4",
-    "web-blog": "=0.1.4",
-    "tconfig": "1.0.0"
+    "web-wiki": "=0.1.5",
+    "web-blog": "=0.1.5",
+    "tconfig": "1.0.0",
+    "web-static-wiki": "=0.1.8",
+    "tpathexp": "^1.2.0"
   },
   "devDependencies": {}
 }

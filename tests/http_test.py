@@ -65,7 +65,7 @@ def main():
         config_file = Path(folder) / "site.ini"
         config_file.write_text(f"[site]\norigin = {base}\nport = {port}\n"
                                f"sqlite_path = {folder}/community.sqlite3\nkey_file = {folder}/community.keyset\n"
-                               "[account]\nemail_hash_salt = http-test-salt\n")
+                               "[account]\nemail_hash_salt = http-test-salt\n[groups]\nmoderator = member@example.com\n")
         def start():
             proc = subprocess.Popen([str(ROOT / "start.sh"), "--config", str(config_file)], env=env, cwd=folder, stdout=log, stderr=log)
             for _ in range(100):
@@ -82,7 +82,7 @@ def main():
         proc = start()
         try:
             assert "A little space to grow." in fetch("/")
-            for path, text in [("/forum", "Community discussions"), ("/wiki/community-handbook", "Community handbook"), ("/blog", "A place to build together")]:
+            for path, text in [("/forum", "Discussions"), ("/wiki/community-handbook", "Community handbook"), ("/blog", "A place to build together")]:
                 body = fetch(path)
                 assert "Juniper Yard" in body and text in body, (path, body)
             for kind in ("wiki", "blog"):
@@ -98,6 +98,8 @@ def main():
             assert 'name="stay_signed_in"' in body
             body = fetch("/user/login", dict(email="member@example.com", password=password, stay_signed_in="1", csrf=csrf(body)))
             assert "Signed in as member@example.com" in page_text(body)
+            assert 'Pending moderation' in fetch('/forum')
+            assert '<svg' in fetch('/images/yard.svg')
             assert any(cookie.expires and cookie.expires > time.time() + 86400 for cookie in jar)
             assert '/user/change-password' in body
             body = fetch('/user/change-password')
@@ -128,7 +130,7 @@ def main():
             body = fetch("/forum/new", dict(title="First discussion", body="**Hello** <script>alert(1)</script>", csrf=csrf(body)))
             assert "First discussion" in body and "<strong>Hello</strong>" in body and "<script>alert" not in body
             assert '<span class="user-profile">Mira</span>' in body and 'Fern' not in body
-            topic_path = html.unescape(re.search(r'<form method="post" action="([^"]+/topic/[^"]+)"', body)[1])
+            topic_path = html.unescape(re.search(r'<form[^>]*method="post" action="([^"]+/topic/[^"]+)"', body)[1])
             body = fetch(topic_path, dict(body="A reply", csrf=csrf(body)))
             assert body.count('<span class="user-profile">Mira</span>') == 2
             body = fetch('/user/profile')
@@ -137,9 +139,10 @@ def main():
             assert '<span class="user-profile">Rowan</span>' in fetch('/forum')
             for kind in ("wiki", "blog"):
                 body = fetch(f"/{kind}/_new")
-                fields = dict(title="Community HTTP note", markdown="A persistent community note.", csrf=csrf(body))
+                fields = dict(title="Community HTTP note", markdown="A persistent community note.\n![Garden](yard.svg)", csrf=csrf(body))
                 if kind == "blog": fields["published_at"] = "2026-11-10"
-                assert "A persistent community note" in fetch(f"/{kind}/_new", fields)
+                result = fetch(f"/{kind}/_new", fields)
+                assert "A persistent community note" in result and 'src="/images/yard.svg"' in result
             body = fetch("/user")
             token = csrf(body)
             fetch("/user/logout", dict(csrf="wrong"), status=403)

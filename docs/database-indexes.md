@@ -16,8 +16,13 @@ and tenant-scoped SQL stores.
 | web-user/limits | Counter lookup/update | Primary key `(tenant, id)` |
 | web-user/limits | Expired counter cleanup | `web_user_limits_expiry (tenant, expires)` |
 | web-forum/topics | Topic lookup | Primary key `(tenant, id)` |
-| web-forum/topics | Recent topics with a page limit | `web_forum_topics_recent (tenant, created_at, id)` scanned backward |
-| web-forum/replies | Recent replies for a topic | `web_forum_replies_topic_recent (tenant, topic, created_at, id)` scanned backward |
+| web-forum/topics | Visible topics with count and pagination | `web_forum_topics_visibility (tenant, status, hidden, created_at, id)` |
+| web-forum/topics | Latest public activity | `web_forum_topics_activity (tenant, status, hidden, last_activity_at, id)` |
+| web-forum/topics | Public member discussions | `web_forum_topics_author_visible (tenant, author, status, hidden, created_at, id)` |
+| web-forum/replies | Visible chronological replies with pagination | `web_forum_replies_topic_visible (tenant, topic, status, hidden, created_at, id)` |
+| web-forum/moderation | Action history, optionally by discussion | `(tenant, created_at, id)` and `(tenant, topic_id, created_at, id)` |
+| web-user/group_members | Membership by keyed email | `web_user_group_email (tenant, email_key, group_name)` |
+| web-user/group_permissions | Grants for a group | Primary key `(tenant, group_name, permission)` |
 | web-wiki/items | Active/inactive page lookup | Primary key `(domain, path)` |
 | web-wiki/items | Active children of a folder | `web_wiki_children (domain, parent_path, active)` |
 | web-blog/items | Active/inactive post lookup | Primary key `(domain, path)` |
@@ -35,7 +40,7 @@ in one PostgreSQL index tuple. The other ordered lists need no separate sort in
 the audited plans.
 
 `tests/indexes.test` captures the packages' actual tpersist statements and runs
-EXPLAIN with the same bound parameters on SQLite and PostgreSQL. It covers 31
+EXPLAIN with the same bound parameters on SQLite and PostgreSQL. It covers 35
 read/cleanup plans using 32 tenants/domains and 2,048 rows per table, after
 ANALYZE. Cleanup checks cover bounded expiry selection, individual deletions,
 and revocation of sessions for removed pending registrations.

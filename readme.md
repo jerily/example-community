@@ -9,9 +9,9 @@ PostgreSQL (`tsession-postgres`) through `web-user::connect` and
 KSUIDs; session and recovery tokens use `twebserver::random_bytes`. Passwords use
 `bcrypt-tcl` at cost 12 (6-character minimum, 72 UTF-8 bytes maximum).
 
-The site pins `web-user` to `=0.4.0`, `web-forum` to `=0.1.11`, and `web-wiki`
-and `web-blog` to `=0.1.4` in `ttrek.json`. The Tcl runtime also requires exactly
-`web-user` 0.4.0. Forum topics and replies show their creation dates and times in UTC.
+The site pins `web-user` to `=0.5.0`, `web-forum` to `=0.2.0`, and `web-wiki`
+and `web-blog` to `=0.1.5` in `ttrek.json`. The Tcl runtime also requires exactly
+`web-user` 0.5.0. Forum topics and replies show their creation dates and times in UTC.
 
 ## Run locally
 
@@ -36,12 +36,12 @@ it in a private `site.ini`, and reuse the file across restarts. You can also ins
 the example as a dependency in an initialized ttrek project:
 
 ```sh
-ttrek install -y example-community@0.2.2
+ttrek install -y example-community
 ttrek run -package example-community -script start -- --config /path/to/site.ini --port 8080
 ```
 
 For development, use Tcl 9.1 or newer and source checkouts of this site and
-`web-user`, `web-forum`, `web-wiki` and `web-blog`, with their native dependencies
+`web-user`, `web-forum`, `web-wiki`, `web-blog` and `web-static-wiki`, with their native dependencies
 installed. Put the checkout directories and the native install prefix's `lib`
 directory on `TCLLIBPATH`, then run:
 
@@ -103,8 +103,7 @@ connection properties such as `host`, `port`, `database`, `user`, `password` and
 `email_hash_salt` is required in LOCAL and PROD. Encrypted tconfig deployments
 can supply `[account] enc:email_hash_salt`; the host decrypts it before creating
 the account store. Keep it stable alongside the keysets. Email and names are
-encrypted; email lookup uses a salted, keyed digest. This release requires a fresh
-account database; unsalted email indexes have no compatibility or migration path.
+encrypted; email lookup uses a salted, keyed digest.
 
 The host loads persistent `aead`/`mac` keysets from `key_file` per worker; no secret
 is embedded in application code. Runtime data paths are relative to `PROJECT_HOME`
@@ -227,3 +226,54 @@ Database access in all mounted packages and SQL session stores uses `tpersist`.
 See [database indexes](docs/database-indexes.md) for the access-path inventory
 and the SQLite/PostgreSQL EXPLAIN audit. Rerun explicit initialization to create
 new indexes in an existing database before serving with this release.
+
+## Groups, moderation, and CAPTCHA
+
+Add comma-separated member emails to your configuration:
+
+```ini
+[groups]
+admin = mira@example.com, rowan@example.com
+moderator = alex@example.com
+
+[permissions]
+admin = forum.moderate
+moderator = forum.moderate
+
+[forum]
+moderation = true
+posting_captcha = true
+page_size = 20
+```
+
+Restart to sync the groups and permissions through `web-user`. You can list an
+email before its owner registers; the account must verify that email before it
+receives permissions. Removing an email or permission and restarting revokes
+access for existing sessions too. This applies in both LOCAL and PROD; run
+`--initdb true` to initialize the database before first PROD startup.
+
+With moderation enabled, all new topics and replies wait for approval. Members
+can see their own pending submissions. Moderators get links to pending posts,
+hidden posts, and the moderation history. They can approve/reject submissions,
+hide/restore topics or replies, and lock/unlock discussions. Each action needs a
+reason and records the moderator and time. Restoring a hidden pending post does
+not approve it.
+
+Posting CAPTCHA is a separate switch. When enabled, `tcaptcha` supplies a
+single-use challenge on both new-topic and reply forms. Account settings control
+its length, lifetime, and attempt limits. Both switches default to false.
+
+Topic lists offer **Newest topics** (default) and **Latest activity**. Replies are
+chronological, lists are paginated, and author names link to forum profiles.
+
+## Images
+
+Put images in `content/images/` and reference them as `![A garden](yard.svg)`.
+The same renderer handles notebook pages, journal posts, forum messages and the
+homepage. It produces `/images/yard.svg`, including from nested pages. Restart
+after adding files. `[site] images_directory` selects another image folder.
+
+`web-static-wiki` supplies the shared validated image inventory and renderer;
+`web-wiki`, `web-blog`, and `web-forum` receive it as a rendering callback.
+`tpathexp` owns all routing, including images; `twebserver` calls `process_conn`
+and sends the resulting responses. The example uses `tpathexp` ^1.2.0.

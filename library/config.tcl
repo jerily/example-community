@@ -17,7 +17,7 @@ proc ::community::load_config {{filename {}} {port {}}} {
             set explicitOrigin [dict exists $loaded site origin]
         }
         dict for {section properties} $loaded {
-            if {$section ni {site account user forum wiki blog server postgresql}} {
+            if {$section ni {site account user forum wiki blog server postgresql groups permissions}} {
                 error "unknown configuration section: $section"
             }
             if {[dict exists $properties master_template_file]} {
@@ -47,8 +47,12 @@ proc ::community::load_config {{filename {}} {port {}}} {
         error "ENV=PROD requires an HTTPS origin in the configuration file"
     }
     set base [expr {[info exists ::env(PROJECT_HOME)] ? $::env(PROJECT_HOME) : [pwd]}]
-    foreach name {sqlite_path key_file} {
+    set bundledImages [expr {[dict get $config images_directory] eq "content/images"}]
+    foreach name {sqlite_path key_file images_directory} {
         dict set config $name [file join $base [dict get $config $name]]
+    }
+    if {$bundledImages && ![file isdirectory [dict get $config images_directory]]} {
+        dict set config images_directory [file join $root content images]
     }
     ::web::wiki::canonical_path [dict get $config home_path]
     dict set config account [::web::user::settings [dict merge [dict get $sections account] \
@@ -57,6 +61,8 @@ proc ::community::load_config {{filename {}} {port {}}} {
         issuer [dict get $config site_name]] [dict get $sections user]]
     dict set config user origin [dict get $config origin]
     foreach section {forum wiki blog} {dict set config $section [dict get $sections $section]}
+    foreach section {groups permissions} {dict set config $section [dict get $sections $section]}
+    ::web::user::access_config [dict get $config groups] [dict get $config permissions]
     dict set config server_options [dict get $sections server]
     set postgresql {}
     dict for {name value} [dict get $sections postgresql] {

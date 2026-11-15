@@ -7,3 +7,5 @@
 .account-remember { display: flex; align-items: flex-start; gap: 12px; }
 .account-remember input[type="checkbox"] { width: auto; flex: 0 0 auto; margin-top: 5px; }
 .account-remember-hint { display: block; font-size: 12px; font-weight: 400; color: var(--muted); }
+
+.markdown img { max-width: 100%; height: auto; }
