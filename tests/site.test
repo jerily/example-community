@@ -2,6 +2,29 @@ package require tcltest
 package require example-community
 namespace import ::tcltest::*
 
+test dependencies-1 {the pinned account package loads even when a newer version is available} -body {
+    set child [interp create]
+    try {
+        $child eval [list set auto_path $::auto_path]
+        $child eval {
+            package ifneeded web-user 0.5.0 {error {unexpected account package version}}
+            package require example-community
+            package present web-user
+        }
+    } finally {interp delete $child}
+} -result 0.4.0
+
+test dependencies-2 {an already loaded different account version is rejected} -body {
+    set child [interp create]
+    try {
+        $child eval [list set auto_path $::auto_path]
+        $child eval {
+            package provide web-user 0.5.0
+            catch {package require example-community}
+        }
+    } finally {interp delete $child}
+} -result 1
+
 test site-1 {tconfig overrides the master; PROD and invalid ENV fail closed} -setup {
     set template [makeFile {<main>{% block body %}{% endblock %}</main>} master.html.jinja]
     set filename [makeFile "\[site\]\nmaster_template_file = $template\n" site.ini]

@@ -9,9 +9,9 @@ PostgreSQL (`tsession-postgres`) through `web-user::connect` and
 KSUIDs; session and recovery tokens use `twebserver::random_bytes`. Passwords use
 `bcrypt-tcl` at cost 12 (6-character minimum, 72 UTF-8 bytes maximum).
 
-The site pins `web-user` to `=0.2.1`, `web-forum` to `=0.1.9`, and `web-wiki`
-and `web-blog` to `=0.1.3`, in `ttrek.json`. Forum topics and replies show their
-creation dates and times in UTC.
+The site pins `web-user` to `=0.4.0`, `web-forum` to `=0.1.11`, and `web-wiki`
+and `web-blog` to `=0.1.4` in `ttrek.json`. The Tcl runtime also requires exactly
+`web-user` 0.4.0. Forum topics and replies show their creation dates and times in UTC.
 
 ## Run locally
 

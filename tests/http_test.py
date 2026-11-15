@@ -1,5 +1,6 @@
 """Real HTTP, shared mounts, auth, persistence and CSRF. No Docker required."""
 import html
+from html.parser import HTMLParser
 import http.cookiejar
 import os
 from pathlib import Path
@@ -16,6 +17,13 @@ import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
 PASSWORD = "grow42"
+
+def page_text(body):
+    parts = []
+    parser = HTMLParser()
+    parser.handle_data = parts.append
+    parser.feed(body)
+    return "".join(parts)
 
 def main():
     password = PASSWORD
@@ -87,8 +95,10 @@ def main():
             fetch("/user/register", dict(email="member@example.com", password="short", first_name="Mira", last_name="Fern", csrf=csrf(body)), status=400)
             body = fetch("/user/register", dict(email="member@example.com", password=password, first_name="Mira", last_name="Fern", csrf=csrf(body)))
             body = fetch("/user/verify", dict(code=code(body), csrf=csrf(body)))
-            body = fetch("/user/login", dict(email="member@example.com", password=password, csrf=csrf(body)))
-            assert "Signed in as member@example.com" in body
+            assert 'name="stay_signed_in"' in body
+            body = fetch("/user/login", dict(email="member@example.com", password=password, stay_signed_in="1", csrf=csrf(body)))
+            assert "Signed in as member@example.com" in page_text(body)
+            assert any(cookie.expires and cookie.expires > time.time() + 86400 for cookie in jar)
             assert '/user/change-password' in body
             body = fetch('/user/change-password')
             assert 'minlength="6"' in body and 'name="current_password"' in body
@@ -101,7 +111,7 @@ def main():
             proc.send_signal(signal.SIGTERM)
             proc.wait(timeout=5)
             proc = start()
-            assert "Signed in as member@example.com" in fetch('/user')
+            assert "Signed in as member@example.com" in page_text(fetch('/user'))
             for kind in ("wiki", "blog"):
                 assert f'/{kind}/_new' in fetch(f'/{kind}')
             assert '/wiki/_edit' in fetch('/wiki/community-handbook')
@@ -146,7 +156,7 @@ def main():
             assert "A member improved our home page." in fetch("/")
             body = fetch("/user/login")
             body = fetch("/user/login", dict(email="member@example.com", password=password, csrf=csrf(body)))
-            assert "Signed in as member@example.com" in body
+            assert "Signed in as member@example.com" in page_text(body)
             body = fetch("/user/forgot", dict(email="member@example.com", csrf=csrf(body)))
             body = fetch("/user/reset", dict(code=code(body), password=password + " updated", csrf=csrf(body)))
             assert "Password changed" in body

@@ -63,6 +63,7 @@ proc ::indexaudit::seed {} {
     set tables {
         web_user_users {tenant id email_key email password verified mfa_secret last_step revision created_at}
         web_user_profiles {tenant id first_name last_name}
+        web_user_registrations {tenant id email_key email password first_name last_name created_at expires}
         web_user_limits {tenant id hits expires}
         tsession_sessions {tenant id subject expires data revision}
         web_forum_topics {tenant id author title body created_at}
@@ -155,7 +156,13 @@ proc ::indexaudit::run {} {
     check throttle-counter {::web::user::one $userStore web_user_limits {id id-042}} {web_user_limits}
     check session-id {::tsession::sql::get $sessions id-042} {tsession_sessions}
     check session-revoke {::tsession::sql::revoke $sessions user-15} {tsession_subject}
-    check expiry-prune {::web::user::prune $userStore} {tsession_expiry web_user_limits_expiry}
+    check expiry-prune {::web::user::prune $userStore} {
+        web_user_registrations_expiry
+        web_user_registrations tsession_subject
+        web_user_registrations tsession_subject
+        tsession_expiry tsession_sessions tsession_sessions
+        web_user_limits_expiry web_user_limits web_user_limits
+    }
     check topic-id {::web::user::one $userStore web_forum_topics {id id-042}} {web_forum_topics}
     check recent-topics {::web::forum::list_rows $userStore web_forum_topics {} 10} {web_forum_topics_recent} 1
     check topic-replies {::web::forum::list_rows $userStore web_forum_replies {topic id-002} 10} {web_forum_replies_topic_recent} 1
@@ -189,6 +196,6 @@ foreach backend {sqlite postgresql} {
     test indexes-$backend {all package retrieval paths use their intended indexes} \
         -constraints [expr {$backend eq "postgresql" ? "index_postgres" : {}}] \
         -setup {::indexaudit::setup $backend} -body {::indexaudit::run} \
-        -cleanup {::indexaudit::cleanup} -result 22
+        -cleanup {::indexaudit::cleanup} -result 31
 }
 cleanupTests
