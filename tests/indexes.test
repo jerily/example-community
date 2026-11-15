@@ -63,6 +63,7 @@ proc ::indexaudit::seed {} {
     set tables {
         web_user_users {tenant id email_key email password verified mfa_secret last_step revision created_at}
         web_user_profiles {tenant id first_name last_name}
+        web_user_registrations {tenant id email_key email password first_name last_name created_at expires}
         web_user_limits {tenant id hits expires}
         tsession_sessions {tenant id subject expires data revision}
         web_forum_topics {tenant id author title body created_at}
@@ -152,13 +153,24 @@ proc ::indexaudit::run {} {
     check user-id {::web::user::user_by_id $userStore id-042} {web_user_users}
     check user-email {::web::user::user_by_email $userStore member@example.com} {web_user_users}
     check user-profile {::web::user::one $userStore web_user_profiles {id id-042}} {web_user_profiles}
+    check registered-users {::web::user::admin_user_rows $userStore 1 registered} {web_user_ web_user_registered} 1
+    check signed-in-users {::web::user::admin_user_rows $userStore 1 last_login} {web_user_ web_user_last_login} 1
+    check active-users {::web::user::admin_user_rows $userStore 1 last_visit} {web_user_ web_user_last_visit} 1
     check throttle-counter {::web::user::one $userStore web_user_limits {id id-042}} {web_user_limits}
     check session-id {::tsession::sql::get $sessions id-042} {tsession_sessions}
     check session-revoke {::tsession::sql::revoke $sessions user-15} {tsession_subject}
-    check expiry-prune {::web::user::prune $userStore} {tsession_expiry web_user_limits_expiry}
+    check expiry-prune {::web::user::prune $userStore} {
+        web_user_registrations_expiry
+        web_user_registrations tsession_subject
+        web_user_registrations tsession_subject
+        tsession_expiry tsession_sessions tsession_sessions
+        web_user_limits_expiry web_user_limits web_user_limits
+    }
     check topic-id {::web::user::one $userStore web_forum_topics {id id-042}} {web_forum_topics}
-    check recent-topics {::web::forum::list_rows $userStore web_forum_topics {} 10} {web_forum_topics_recent} 1
-    check topic-replies {::web::forum::list_rows $userStore web_forum_replies {topic id-002} 10} {web_forum_replies_topic_recent} 1
+    set forum [dict create -store $userStore -config {page_size 10}]
+    check recent-topics {::web::forum::page_rows $forum web_forum_topics [::web::forum::public_filter $userStore] 1} {web_forum_topics_ web_forum_topics_visibility} 1
+    check active-topics {::web::forum::page_rows $forum web_forum_topics [::web::forum::public_filter $userStore] 1 0 activity} {web_forum_topics_ web_forum_topics_activity} 1
+    check topic-replies {::web::forum::page_rows $forum web_forum_replies [::web::forum::predicate $userStore {topic id-002 status published hidden 0}] 1 1} {web_forum_replies_topic_visible web_forum_replies_topic_visible} 1
     foreach kind {wiki blog} {
         set store [set $kind]
         check $kind-page [list ::web::${kind}::load $store /p-042] [list web_${kind}_items]
@@ -189,6 +201,6 @@ foreach backend {sqlite postgresql} {
     test indexes-$backend {all package retrieval paths use their intended indexes} \
         -constraints [expr {$backend eq "postgresql" ? "index_postgres" : {}}] \
         -setup {::indexaudit::setup $backend} -body {::indexaudit::run} \
-        -cleanup {::indexaudit::cleanup} -result 22
+        -cleanup {::indexaudit::cleanup} -result 41
 }
 cleanupTests

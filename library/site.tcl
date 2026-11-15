@@ -34,9 +34,12 @@ proc ::community::router {connection config keys} {
     set store [::web::user::create -connection $connection -config [dict merge [dict get $config account] $keys]]
     set properties [site_properties $config]
     set shared [dict create master_template [dict get $config master_template] properties $properties]
+    set images [::web::static::wiki::image_store -images-directory [dict get $config images_directory] -images-url-prefix /images]
+    set renderer [list ::web::static::wiki::render_content $images]
     set auth [::web::user::mount $router -store $store -config [dict merge $shared [dict get $config user]]]
     set forumConfig [dict merge $shared [dict get $config forum]]
     dict set forumConfig widgets profile [list ::web::user::widget $auth profile]
+    dict set forumConfig render_markdown $renderer
     ::web::forum::mount $router -store $store -user $auth -config $forumConfig
     # Content packages receive these properties through their generic callback.
     dict unset shared properties
@@ -44,11 +47,13 @@ proc ::community::router {connection config keys} {
         set content [::web::${kind}::create -connection $connection -domain [dict get $config tenant] -title [string totitle $kind]]
         if {$kind eq "wiki"} {set homeStore $content}
         ::web::${kind}::mount $router -store $content -prefix /$kind \
-            -authorize [list ::web::user::authorize $auth] -csrf [list ::web::user::csrf $auth] \
+            -authorize [list ::web::user::authorize_permission $auth $kind.edit] -csrf [list ::web::user::csrf $auth] \
             -context [list ::community::template_context $config $auth] \
+            -render-markdown $renderer \
             -config [dict merge $shared [dict get $config $kind]]
     }
-    $router add GET / [list ::community::home $config $homeStore $auth] -strict true
+    $router add GET / [list ::community::home $config $homeStore $auth $renderer] -strict true
+    $router add GET /images/:path(.*) [list ::web::static::wiki::serve_image $images] -strict true
     $router add GET /site.css ::community::stylesheet -strict true
     $router add GET /yard.svg ::community::illustration -strict true
     return $router
@@ -60,10 +65,9 @@ proc ::community::site_properties {config} {
 }
 proc ::community::template_context {config auth request context} {
     set user [::web::user::current_user $auth $request $context]
-    dict merge [site_properties $config] [dict create signed_in [list BOOL [expr {$user ne {}}]] \
-        show_edit_controls [list BOOL [expr {$user ne {}}]]]
+    dict merge [site_properties $config] [dict create signed_in [list BOOL [expr {$user ne {}}]]]
 }
-proc ::community::home {config store auth request context params} {
+proc ::community::home {config store auth renderer request context params} {
     variable root
     try {
         set item [::web::wiki::load $store [dict get $config home_path]]
@@ -73,9 +77,11 @@ proc ::community::home {config store auth request context params} {
     }
     set templates [dict create page.html.jinja [dict get $config master_template] home.html.jinja [::web::user::read_text [file join $root assets home.html.jinja]]]
     set fields [::web::user::text_fields [dict create title [dict get $item title] \
-        markdown_html [::cmark_gfm::render_gfm_html [dict get $item markdown]] \
+        markdown_html [{*}$renderer [dict get $item markdown]] \
         edit_url /wiki/_edit[dict get $item path]]]
     set fields [dict merge $fields [template_context $config $auth $request $context]]
+    dict set fields show_edit_controls [list BOOL [::web::user::authorize_permission $auth wiki.edit \
+        $request $context edit [dict get $item path]]]
     ::web::user::response 200 [::jinja2::render [dict get $templates home.html.jinja] \
         [::tjson::typed_to_json [list M $fields]] -templates $templates -path home.html.jinja]
 }

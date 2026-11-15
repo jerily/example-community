@@ -1,0 +1,102 @@
+package require tcltest
+package require example-community
+namespace import ::tcltest::*
+namespace eval ::contentaccess {}
+proc ::contentaccess::setup {} {
+    set ::env(ENV) LOCAL
+    variable config [::community::load_config]
+    variable db [::web::user::connect {sqlite_path :memory:}]
+    ::community::initialize $db $config
+    variable keys [dict create aead [::tink::register_keyset [::tink::aead::create_keyset AES256_GCM]] \
+        mac [::tink::register_keyset [::tink::mac::create_keyset HMAC_SHA256]]]
+    variable store [::web::user::create -connection $db -config [dict merge [dict get $config account] $keys]]
+    variable router [::community::router $db $config $keys]
+    variable authRouter [::tpathexp::router]
+    variable auth [::web::user::mount $authRouter -store $store -config [dict get $config user]]
+}
+proc ::contentaccess::member {email} {
+    variable store
+    variable auth
+    set uid user_[ksuid::generate_ksuid]
+    ::web::user::insert $store web_user_users [dict create id $uid active 1 verified 1 \
+        email_key [::web::user::email_key $store $email] email [::web::user::seal $store $email [list email $uid]] \
+        password unused mfa_secret {} last_step -1 revision 0 created_at 1]
+    set token [::web::user::new_session $store auth $uid]
+    lindex [split [dict get [::web::user::set_cookie $auth {} $token] headers Set-Cookie] {;}] 0
+}
+proc ::contentaccess::request {cookie method path {body {}}} {
+    variable config
+    variable router
+    set request [dict create method $method path $path body $body headers [dict create \
+        host localhost:8080 origin http://localhost:8080 cookie $cookie content-type application/x-www-form-urlencoded]]
+    ::community::dispatch $router $config $request {addr 127.0.0.1}
+}
+proc ::contentaccess::cleanup {} {
+    $::contentaccess::router destroy
+    $::contentaccess::authRouter destroy
+    ::tpersist::db_disconnect $::contentaccess::db
+    dict for {name handle} $::contentaccess::keys {::tink::unregister_keyset $handle}
+}
+test content-access-1 {separate grants control links and routes; moderator or member status alone cannot edit} -setup ::contentaccess::setup -body {
+    set config $::contentaccess::config
+    set groups [dict merge [dict get $config groups] {
+        admin admin@example.com moderator moderator@example.com editor editor@example.com
+        wiki_writer wiki@example.com blog_writer blog@example.com}]
+    set permissions [dict merge [dict get $config permissions] {wiki_writer wiki.edit blog_writer blog.edit}]
+    ::web::user::sync_access $::contentaccess::store $groups $permissions
+    set results {}
+    foreach email {{} member@example.com moderator@example.com wiki@example.com blog@example.com editor@example.com admin@example.com} {
+        set cookie [expr {$email eq {} ? "" : [::contentaccess::member $email]}]
+        set row {}
+        foreach kind {wiki blog} path {/community-handbook /2026-11-10-a-place-to-build-together} {
+            set page [::contentaccess::request $cookie GET /$kind$path]
+            set index [::contentaccess::request $cookie GET /$kind]
+            lappend row [dict get $page statusCode] \
+                [string match "*href=\"/$kind/_edit$path\"*" [dict get $page body]] \
+                [string match "*href=\"/$kind/_new\"*" [dict get $index body]] \
+                [dict get [::contentaccess::request $cookie GET /$kind/_edit$path] statusCode] \
+                [dict get [::contentaccess::request $cookie GET /$kind/_new] statusCode]
+        }
+        lappend row [string match {*href="/wiki/_edit/a-little-space-to-grow"*} \
+            [dict get [::contentaccess::request $cookie GET /] body]]
+        lappend row [dict get [::contentaccess::request $cookie GET /user/admin/users] statusCode]
+        lappend results $row
+    }
+    set results
+} -cleanup ::contentaccess::cleanup -result [list \
+    {200 0 0 403 403 200 0 0 403 403 0 302} \
+    {200 0 0 403 403 200 0 0 403 403 0 403} \
+    {200 0 0 403 403 200 0 0 403 403 0 403} \
+    {200 1 1 200 200 200 0 0 403 403 1 403} \
+    {200 0 0 403 403 200 1 1 200 200 0 403} \
+    {200 1 1 200 200 200 1 1 200 200 1 403} \
+    {200 1 1 200 200 200 1 1 200 200 1 200}]
+
+test content-access-2 {revocation blocks saved forms and creates without changing sessions or content} -setup ::contentaccess::setup -body {
+    set store $::contentaccess::store
+    set cookie [::contentaccess::member editor@example.com]
+    ::web::user::sync_access $store {editor editor@example.com} {editor {wiki.edit, blog.edit}}
+    set token [::web::user::csrf $::contentaccess::auth issue [dict create headers [dict create cookie $cookie]] {} {}]
+    set result {}
+    foreach kind {wiki blog} path {/community-handbook /2026-11-10-a-place-to-build-together} {
+        set content [::web::${kind}::create -connection $::contentaccess::db -domain [dict get $::contentaccess::config tenant]]
+        set item [::web::${kind}::load $content $path]
+        set fields "title=Updated&markdown=Editor+change&revision=[dict get $item revision]&csrf=$token"
+        lappend result [dict get [::contentaccess::request $cookie POST /$kind/_edit$path $fields] statusCode]
+        set fields "title=New&markdown=Editor+page&csrf=$token&published_at=2026-11-15"
+        lappend result [dict get [::contentaccess::request $cookie POST /$kind/_new $fields] statusCode]
+        lappend result [dict get [::contentaccess::request $cookie POST /$kind/_new {title=Denied&markdown=x&csrf=wrong&published_at=2026-11-15}] statusCode]
+    }
+    ::web::user::sync_access $store {} {}
+    foreach kind {wiki blog} path {/community-handbook /2026-11-10-a-place-to-build-together} {
+        set content [::web::${kind}::create -connection $::contentaccess::db -domain [dict get $::contentaccess::config tenant]]
+        set before [::web::${kind}::load $content $path]
+        set fields "title=Overwritten&markdown=Revoked&revision=[dict get $before revision]&csrf=$token"
+        lappend result [dict get [::contentaccess::request $cookie POST /$kind/_edit$path $fields] statusCode] \
+            [dict get [::contentaccess::request $cookie POST /$kind/_new "title=Revoked&markdown=x&csrf=$token&published_at=2026-11-15"] statusCode] \
+            [expr {$before eq [::web::${kind}::load $content $path]}]
+    }
+    lappend result [expr {[::web::user::current_user $::contentaccess::auth [dict create headers [dict create cookie $cookie]]] ne {}}]
+    set result
+} -cleanup ::contentaccess::cleanup -result {303 303 403 303 303 403 403 403 1 403 403 1 1}
+cleanupTests

@@ -4,7 +4,7 @@ proc ::community::worker {config} {
     variable routes [router $connection $config $key_handles]
     variable settings $config
 }
-proc ::community::process {context request} {
+proc ::community::process_conn {context request} {
     variable routes
     variable settings
     try {set response [dispatch $routes $settings $request $context]} on error {message opts} {
@@ -21,6 +21,8 @@ proc ::community::serve {config {initialize 0}} {
     set db [connection $config]
     try {
         if {$mode eq "LOCAL" || $initialize} {initialize $db $config}
+        set accounts [::web::user::create -connection $db -config [dict merge [dict get $config account] $keyHandles]]
+        ::web::user::sync_access $accounts [dict get $config groups] [dict get $config permissions]
         # Validate mounts/configuration before opening a listener.
         set check [router $db $config $keyHandles]
         $check destroy
@@ -30,7 +32,7 @@ proc ::community::serve {config {initialize 0}} {
     }
     if {$initialize} {puts {Community schema initialized.}; return}
     set init [join [list [list set auto_path $::auto_path] {package require example-community} [list ::community::worker $config]] \n]
-    set server [::twebserver::create_server [dict merge [dict create rootdir [pwd]] [dict get $config server_options]] ::community::process $init]
+    set server [::twebserver::create_server [dict merge [dict create rootdir [pwd]] [dict get $config server_options]] ::community::process_conn $init]
     try {
         # Loopback only. In PROD terminate HTTPS at a trusted reverse proxy.
         ::twebserver::listen_server -http -host [dict get $config listen_host] -num_threads [dict get $config num_threads] $server [dict get $config port]

@@ -1,5 +1,6 @@
 """Real HTTP, shared mounts, auth, persistence and CSRF. No Docker required."""
 import html
+from html.parser import HTMLParser
 import http.cookiejar
 import os
 from pathlib import Path
@@ -16,6 +17,13 @@ import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
 PASSWORD = "grow42"
+
+def page_text(body):
+    parts = []
+    parser = HTMLParser()
+    parser.handle_data = parts.append
+    parser.feed(body)
+    return "".join(parts)
 
 def main():
     password = PASSWORD
@@ -57,7 +65,7 @@ def main():
         config_file = Path(folder) / "site.ini"
         config_file.write_text(f"[site]\norigin = {base}\nport = {port}\n"
                                f"sqlite_path = {folder}/community.sqlite3\nkey_file = {folder}/community.keyset\n"
-                               "[account]\nemail_hash_salt = http-test-salt\n")
+                               "[account]\nemail_hash_salt = http-test-salt\n[groups]\nmoderator = member@example.com\n")
         def start():
             proc = subprocess.Popen([str(ROOT / "start.sh"), "--config", str(config_file)], env=env, cwd=folder, stdout=log, stderr=log)
             for _ in range(100):
@@ -74,7 +82,7 @@ def main():
         proc = start()
         try:
             assert "A little space to grow." in fetch("/")
-            for path, text in [("/forum", "Community discussions"), ("/wiki/community-handbook", "Community handbook"), ("/blog", "A place to build together")]:
+            for path, text in [("/forum", "Discussions"), ("/wiki/community-handbook", "Community handbook"), ("/blog", "A place to build together")]:
                 body = fetch(path)
                 assert "Juniper Yard" in body and text in body, (path, body)
             for kind in ("wiki", "blog"):
@@ -87,8 +95,24 @@ def main():
             fetch("/user/register", dict(email="member@example.com", password="short", first_name="Mira", last_name="Fern", csrf=csrf(body)), status=400)
             body = fetch("/user/register", dict(email="member@example.com", password=password, first_name="Mira", last_name="Fern", csrf=csrf(body)))
             body = fetch("/user/verify", dict(code=code(body), csrf=csrf(body)))
-            body = fetch("/user/login", dict(email="member@example.com", password=password, csrf=csrf(body)))
-            assert "Signed in as member@example.com" in body
+            assert 'name="stay_signed_in"' in body
+            body = fetch("/user/login", dict(email="member@example.com", password=password, stay_signed_in="1", csrf=csrf(body)))
+            assert "Signed in as member@example.com" in page_text(body)
+            assert 'Pending moderation' in fetch('/forum')
+            assert '/user/admin/users' not in body
+            fetch('/user/admin/users', status=403)
+            # A moderator can manage discussions but has no editorial grants.
+            for kind, path in (("wiki", "/community-handbook"), ("blog", "/2026-11-10-a-place-to-build-together")):
+                assert f'/{kind}/_new' not in fetch(f'/{kind}')
+                assert f'/{kind}/_edit' not in fetch(f'/{kind}{path}')
+                fetch(f'/{kind}/_new', status=403)
+                fetch(f'/{kind}/_edit{path}', status=403)
+                fields = dict(title="Denied", markdown="No permission", csrf=csrf(body), revision="1", published_at="2026-11-15")
+                fetch(f'/{kind}/_new', fields, status=403)
+                fetch(f'/{kind}/_edit{path}', fields, status=403)
+            assert '/wiki/_edit' not in fetch('/')
+            assert '<svg' in fetch('/images/yard.svg')
+            assert any(cookie.expires and cookie.expires > time.time() + 86400 for cookie in jar)
             assert '/user/change-password' in body
             body = fetch('/user/change-password')
             assert 'minlength="6"' in body and 'name="current_password"' in body
@@ -97,11 +121,12 @@ def main():
             body = fetch('/user/change-password', dict(current_password=password, password=next_password, confirm_password=next_password, csrf=csrf(body)))
             assert "Password changed" in body and "Signed in as" in body
             password = next_password
-            # A live authenticated session survives a server/connection restart.
+            # Sync editorial grants on restart without replacing the session.
+            config_file.write_text(config_file.read_text() + "editor = member@example.com\n")
             proc.send_signal(signal.SIGTERM)
             proc.wait(timeout=5)
             proc = start()
-            assert "Signed in as member@example.com" in fetch('/user')
+            assert "Signed in as member@example.com" in page_text(fetch('/user'))
             for kind in ("wiki", "blog"):
                 assert f'/{kind}/_new' in fetch(f'/{kind}')
             assert '/wiki/_edit' in fetch('/wiki/community-handbook')
@@ -118,7 +143,7 @@ def main():
             body = fetch("/forum/new", dict(title="First discussion", body="**Hello** <script>alert(1)</script>", csrf=csrf(body)))
             assert "First discussion" in body and "<strong>Hello</strong>" in body and "<script>alert" not in body
             assert '<span class="user-profile">Mira</span>' in body and 'Fern' not in body
-            topic_path = html.unescape(re.search(r'<form method="post" action="([^"]+/topic/[^"]+)"', body)[1])
+            topic_path = html.unescape(re.search(r'<form[^>]*method="post" action="([^"]+/topic/[^"]+)"', body)[1])
             body = fetch(topic_path, dict(body="A reply", csrf=csrf(body)))
             assert body.count('<span class="user-profile">Mira</span>') == 2
             body = fetch('/user/profile')
@@ -127,9 +152,23 @@ def main():
             assert '<span class="user-profile">Rowan</span>' in fetch('/forum')
             for kind in ("wiki", "blog"):
                 body = fetch(f"/{kind}/_new")
-                fields = dict(title="Community HTTP note", markdown="A persistent community note.", csrf=csrf(body))
+                fields = dict(title="Community HTTP note", markdown="A persistent community note.\n![Garden](yard.svg)", csrf=csrf(body))
                 if kind == "blog": fields["published_at"] = "2026-11-10"
-                assert "A persistent community note" in fetch(f"/{kind}/_new", fields)
+                result = fetch(f"/{kind}/_new", fields)
+                assert "A persistent community note" in result and 'src="/images/yard.svg"' in result
+            # Only the admin grant reveals the account directory, including over HTTP.
+            assert '/user/admin/users' not in fetch('/user')
+            config_file.write_text(config_file.read_text() + "admin = member@example.com\n")
+            proc.send_signal(signal.SIGTERM)
+            proc.wait(timeout=5)
+            proc = start()
+            assert '/user/admin/users' in fetch('/user')
+            directory = fetch('/user/admin/users')
+            assert 'member@example.com' in directory and 'Registered' in directory
+            assert 'Authenticator / MFA' in directory and 'Groups' in directory
+            assert 'user-admin-badge">admin' in directory and 'user-admin-badge">Off' in directory
+            assert 'user-admin' in fetch('/user/_assets/admin.css')
+            fetch('/user/admin/users', dict(action='disable'), status=405)
             body = fetch("/user")
             token = csrf(body)
             fetch("/user/logout", dict(csrf="wrong"), status=403)
@@ -146,14 +185,14 @@ def main():
             assert "A member improved our home page." in fetch("/")
             body = fetch("/user/login")
             body = fetch("/user/login", dict(email="member@example.com", password=password, csrf=csrf(body)))
-            assert "Signed in as member@example.com" in body
+            assert "Signed in as member@example.com" in page_text(body)
             body = fetch("/user/forgot", dict(email="member@example.com", csrf=csrf(body)))
             body = fetch("/user/reset", dict(code=code(body), password=password + " updated", csrf=csrf(body)))
             assert "Password changed" in body
             fetch("/user/login", dict(email="member@example.com", password=password, csrf=csrf(body)), status=401)
             body = fetch("/user/login", dict(email="member@example.com", password=password + " updated", csrf=csrf(body)))
             assert "Signed in as" in body
-            print("HTTP checks passed: all mounts, signed cookies, login-aware controls, wiki-backed home, CSRF, change password, reset, shared profile widgets and authenticated restart persistence.")
+            print("HTTP checks passed: all mounts, signed cookies, permission-aware controls, moderator/editor separation, wiki-backed home, CSRF, change password, reset, shared profile widgets and authenticated restart persistence.")
         finally:
             if proc.poll() is None:
                 proc.send_signal(signal.SIGTERM)
