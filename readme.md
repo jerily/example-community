@@ -130,8 +130,10 @@ The host binds the widget in `library/site.tcl`; see the
 Run the explicit PROD `--initdb true` step to create the schema before serving.
 LOCAL initialization does this automatically.
 
-All verified members can create/edit wiki/blog content in this example. Replace
-the authorization callback in `library/site.tcl` for a different editorial policy.
+Creating and editing wiki pages requires `wiki.edit`; blog posts require
+`blog.edit`. The homepage uses the wiki permission. Configure these grants through
+groups as described below; signing in or moderating the forum does not grant
+editorial access.
 
 ## Home page and dynamic properties
 
@@ -147,10 +149,10 @@ creates a new revision and replaces the imported item with the changed source.
 Removing the source hides its imported item; a missing home item returns 404.
 
 The host's `template_context` callback returns typed Jinja properties for each
-request. It supplies `signed_in` and `show_edit_controls` based on the current
-account session. The wiki/blog defaults still show configured editing controls
-for hosts that do not pass a callback. Authorization and CSRF remain independent
-server-side checks. The home template uses the same property for its edit link.
+request. It supplies `signed_in` from the current account session. Wiki/blog
+packages generate edit and create links only when the permission callback allows
+them; the home template checks `wiki.edit` for its edit link. Every form submission
+checks permission again, as well as CSRF, so revocation applies to open forms.
 
 The package manifest uses `scripts.start.file: start.sh`. The script launches
 the source command using `PROJECT_HOME`. The registry recipe supplies a separate
@@ -235,10 +237,12 @@ Add comma-separated member emails to your configuration:
 [groups]
 admin = mira@example.com, rowan@example.com
 moderator = alex@example.com
+editor = robin@example.com
 
 [permissions]
-admin = forum.moderate
+admin = forum.moderate, wiki.edit, blog.edit
 moderator = forum.moderate
+editor = wiki.edit, blog.edit
 
 [forum]
 moderation = true
@@ -251,6 +255,10 @@ email before its owner registers; the account must verify that email before it
 receives permissions. Removing an email or permission and restarting revokes
 access for existing sessions too. This applies in both LOCAL and PROD; run
 `--initdb true` to initialize the database before first PROD startup.
+
+An editor may create and edit notebook pages and journal posts. Grant only
+`wiki.edit` or only `blog.edit` to limit someone to one collection. The group
+name itself grants nothing; the permission list is authoritative.
 
 With moderation enabled, all new topics and replies wait for approval. Members
 can see their own pending submissions. Moderators get links to pending posts,

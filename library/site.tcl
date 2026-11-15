@@ -47,7 +47,7 @@ proc ::community::router {connection config keys} {
         set content [::web::${kind}::create -connection $connection -domain [dict get $config tenant] -title [string totitle $kind]]
         if {$kind eq "wiki"} {set homeStore $content}
         ::web::${kind}::mount $router -store $content -prefix /$kind \
-            -authorize [list ::web::user::authorize $auth] -csrf [list ::web::user::csrf $auth] \
+            -authorize [list ::web::user::authorize_permission $auth $kind.edit] -csrf [list ::web::user::csrf $auth] \
             -context [list ::community::template_context $config $auth] \
             -render-markdown $renderer \
             -config [dict merge $shared [dict get $config $kind]]
@@ -65,8 +65,7 @@ proc ::community::site_properties {config} {
 }
 proc ::community::template_context {config auth request context} {
     set user [::web::user::current_user $auth $request $context]
-    dict merge [site_properties $config] [dict create signed_in [list BOOL [expr {$user ne {}}]] \
-        show_edit_controls [list BOOL [expr {$user ne {}}]]]
+    dict merge [site_properties $config] [dict create signed_in [list BOOL [expr {$user ne {}}]]]
 }
 proc ::community::home {config store auth renderer request context params} {
     variable root
@@ -81,6 +80,8 @@ proc ::community::home {config store auth renderer request context params} {
         markdown_html [{*}$renderer [dict get $item markdown]] \
         edit_url /wiki/_edit[dict get $item path]]]
     set fields [dict merge $fields [template_context $config $auth $request $context]]
+    dict set fields show_edit_controls [list BOOL [::web::user::authorize_permission $auth wiki.edit \
+        $request $context edit [dict get $item path]]]
     ::web::user::response 200 [::jinja2::render [dict get $templates home.html.jinja] \
         [::tjson::typed_to_json [list M $fields]] -templates $templates -path home.html.jinja]
 }

@@ -99,6 +99,16 @@ def main():
             body = fetch("/user/login", dict(email="member@example.com", password=password, stay_signed_in="1", csrf=csrf(body)))
             assert "Signed in as member@example.com" in page_text(body)
             assert 'Pending moderation' in fetch('/forum')
+            # A moderator can manage discussions but has no editorial grants.
+            for kind, path in (("wiki", "/community-handbook"), ("blog", "/2026-11-10-a-place-to-build-together")):
+                assert f'/{kind}/_new' not in fetch(f'/{kind}')
+                assert f'/{kind}/_edit' not in fetch(f'/{kind}{path}')
+                fetch(f'/{kind}/_new', status=403)
+                fetch(f'/{kind}/_edit{path}', status=403)
+                fields = dict(title="Denied", markdown="No permission", csrf=csrf(body), revision="1", published_at="2026-11-15")
+                fetch(f'/{kind}/_new', fields, status=403)
+                fetch(f'/{kind}/_edit{path}', fields, status=403)
+            assert '/wiki/_edit' not in fetch('/')
             assert '<svg' in fetch('/images/yard.svg')
             assert any(cookie.expires and cookie.expires > time.time() + 86400 for cookie in jar)
             assert '/user/change-password' in body
@@ -109,7 +119,8 @@ def main():
             body = fetch('/user/change-password', dict(current_password=password, password=next_password, confirm_password=next_password, csrf=csrf(body)))
             assert "Password changed" in body and "Signed in as" in body
             password = next_password
-            # A live authenticated session survives a server/connection restart.
+            # Sync editorial grants on restart without replacing the session.
+            config_file.write_text(config_file.read_text() + "editor = member@example.com\n")
             proc.send_signal(signal.SIGTERM)
             proc.wait(timeout=5)
             proc = start()
@@ -166,7 +177,7 @@ def main():
             fetch("/user/login", dict(email="member@example.com", password=password, csrf=csrf(body)), status=401)
             body = fetch("/user/login", dict(email="member@example.com", password=password + " updated", csrf=csrf(body)))
             assert "Signed in as" in body
-            print("HTTP checks passed: all mounts, signed cookies, login-aware controls, wiki-backed home, CSRF, change password, reset, shared profile widgets and authenticated restart persistence.")
+            print("HTTP checks passed: all mounts, signed cookies, permission-aware controls, moderator/editor separation, wiki-backed home, CSRF, change password, reset, shared profile widgets and authenticated restart persistence.")
         finally:
             if proc.poll() is None:
                 proc.send_signal(signal.SIGTERM)
