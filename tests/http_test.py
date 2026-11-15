@@ -99,6 +99,8 @@ def main():
             body = fetch("/user/login", dict(email="member@example.com", password=password, stay_signed_in="1", csrf=csrf(body)))
             assert "Signed in as member@example.com" in page_text(body)
             assert 'Pending moderation' in fetch('/forum')
+            assert '/user/admin/users' not in body
+            fetch('/user/admin/users', status=403)
             # A moderator can manage discussions but has no editorial grants.
             for kind, path in (("wiki", "/community-handbook"), ("blog", "/2026-11-10-a-place-to-build-together")):
                 assert f'/{kind}/_new' not in fetch(f'/{kind}')
@@ -154,6 +156,19 @@ def main():
                 if kind == "blog": fields["published_at"] = "2026-11-10"
                 result = fetch(f"/{kind}/_new", fields)
                 assert "A persistent community note" in result and 'src="/images/yard.svg"' in result
+            # Only the admin grant reveals the account directory, including over HTTP.
+            assert '/user/admin/users' not in fetch('/user')
+            config_file.write_text(config_file.read_text() + "admin = member@example.com\n")
+            proc.send_signal(signal.SIGTERM)
+            proc.wait(timeout=5)
+            proc = start()
+            assert '/user/admin/users' in fetch('/user')
+            directory = fetch('/user/admin/users')
+            assert 'member@example.com' in directory and 'Registered' in directory
+            assert 'Authenticator / MFA' in directory and 'Groups' in directory
+            assert 'user-admin-badge">admin' in directory and 'user-admin-badge">Off' in directory
+            assert 'user-admin' in fetch('/user/_assets/admin.css')
+            fetch('/user/admin/users', dict(action='disable'), status=405)
             body = fetch("/user")
             token = csrf(body)
             fetch("/user/logout", dict(csrf="wrong"), status=403)

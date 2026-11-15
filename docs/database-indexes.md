@@ -9,6 +9,7 @@ and tenant-scoped SQL stores.
 | Package/table | Access path | Index |
 | --- | --- | --- |
 | web-user/users | ID lookup and revision-checked writes | Primary key `(tenant, id)` |
+| web-user/users | Admin registration-order listing | `web_user_registered (tenant, created_at, id)` |
 | web-user/users | Normalized email lookup | Unique `(tenant, email_key)` |
 | web-user/profiles | Account/profile widget lookup | Primary key `(tenant, id)` |
 | web-user/registrations | Expired pending registration selection | `web_user_registrations_expiry (tenant, expires)` |
@@ -40,7 +41,7 @@ in one PostgreSQL index tuple. The other ordered lists need no separate sort in
 the audited plans.
 
 `tests/indexes.test` captures the packages' actual tpersist statements and runs
-EXPLAIN with the same bound parameters on SQLite and PostgreSQL. It covers 35
+EXPLAIN with the same bound parameters on SQLite and PostgreSQL. It covers 37
 read/cleanup plans using 32 tenants/domains and 2,048 rows per table, after
 ANALYZE. Cleanup checks cover bounded expiry selection, individual deletions,
 and revocation of sessions for removed pending registrations.

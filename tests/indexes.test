@@ -153,6 +153,7 @@ proc ::indexaudit::run {} {
     check user-id {::web::user::user_by_id $userStore id-042} {web_user_users}
     check user-email {::web::user::user_by_email $userStore member@example.com} {web_user_users}
     check user-profile {::web::user::one $userStore web_user_profiles {id id-042}} {web_user_profiles}
+    check registered-users {::web::user::admin_user_rows $userStore 1} {web_user_ web_user_registered} 1
     check throttle-counter {::web::user::one $userStore web_user_limits {id id-042}} {web_user_limits}
     check session-id {::tsession::sql::get $sessions id-042} {tsession_sessions}
     check session-revoke {::tsession::sql::revoke $sessions user-15} {tsession_subject}
@@ -198,6 +199,6 @@ foreach backend {sqlite postgresql} {
     test indexes-$backend {all package retrieval paths use their intended indexes} \
         -constraints [expr {$backend eq "postgresql" ? "index_postgres" : {}}] \
         -setup {::indexaudit::setup $backend} -body {::indexaudit::run} \
-        -cleanup {::indexaudit::cleanup} -result 35
+        -cleanup {::indexaudit::cleanup} -result 37
 }
 cleanupTests

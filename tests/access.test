@@ -59,17 +59,18 @@ test content-access-1 {separate grants control links and routes; moderator or me
         }
         lappend row [string match {*href="/wiki/_edit/a-little-space-to-grow"*} \
             [dict get [::contentaccess::request $cookie GET /] body]]
+        lappend row [dict get [::contentaccess::request $cookie GET /user/admin/users] statusCode]
         lappend results $row
     }
     set results
 } -cleanup ::contentaccess::cleanup -result [list \
-    {200 0 0 403 403 200 0 0 403 403 0} \
-    {200 0 0 403 403 200 0 0 403 403 0} \
-    {200 0 0 403 403 200 0 0 403 403 0} \
-    {200 1 1 200 200 200 0 0 403 403 1} \
-    {200 0 0 403 403 200 1 1 200 200 0} \
-    {200 1 1 200 200 200 1 1 200 200 1} \
-    {200 1 1 200 200 200 1 1 200 200 1}]
+    {200 0 0 403 403 200 0 0 403 403 0 302} \
+    {200 0 0 403 403 200 0 0 403 403 0 403} \
+    {200 0 0 403 403 200 0 0 403 403 0 403} \
+    {200 1 1 200 200 200 0 0 403 403 1 403} \
+    {200 0 0 403 403 200 1 1 200 200 0 403} \
+    {200 1 1 200 200 200 1 1 200 200 1 403} \
+    {200 1 1 200 200 200 1 1 200 200 1 200}]
 
 test content-access-2 {revocation blocks saved forms and creates without changing sessions or content} -setup ::contentaccess::setup -body {
     set store $::contentaccess::store

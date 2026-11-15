@@ -240,7 +240,7 @@ moderator = alex@example.com
 editor = robin@example.com
 
 [permissions]
-admin = forum.moderate, wiki.edit, blog.edit
+admin = forum.moderate, wiki.edit, blog.edit, users.manage
 moderator = forum.moderate
 editor = wiki.edit, blog.edit
 
@@ -255,6 +255,10 @@ email before its owner registers; the account must verify that email before it
 receives permissions. Removing an email or permission and restarting revokes
 access for existing sessions too. This applies in both LOCAL and PROD; run
 `--initdb true` to initialize the database before first PROD startup.
+
+Administrators with `users.manage` see **Your account → Manage users**. The
+directory shows registration times, authenticator status and configured groups.
+It is private to that permission and lists all accounts across pages.
 
 An editor may create and edit notebook pages and journal posts. Grant only
 `wiki.edit` or only `blog.edit` to limit someone to one collection. The group
