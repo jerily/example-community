@@ -9,9 +9,9 @@ PostgreSQL (`tsession-postgres`) through `web-user::connect` and
 prefixed KSUIDs (`user_`, `topic_`, `reply_`, `moderation_`); session and recovery tokens use `twebserver::random_bytes`. Passwords use
 `bcrypt-tcl` at cost 12 (6-character minimum, 72 UTF-8 bytes maximum).
 
-The site pins `web-user` to `=0.5.0`, `web-forum` to `=0.3.0`, and `web-wiki`
+The site pins `web-user` to `=0.5.2`, `web-forum` to `=0.3.0`, and `web-wiki`
 and `web-blog` to `=0.1.5` in `ttrek.json`. The Tcl runtime also requires exactly
-`web-user` 0.5.0. Forum topics and replies show their creation dates and times in UTC.
+`web-user` 0.5.2. Forum topics and replies show their creation dates and times in UTC.
 
 ## Run locally
 
@@ -193,7 +193,7 @@ email_from = accounts@example.com
 email_region = us-east-1
 ```
 
-`aws-sdk-tcl-ses` uses the AWS credential provider chain. Configure the sender
+`pure-tcl-aws-ses` uses the AWS credential provider chain. Configure the sender
 identity and sending permissions in that region. Enabled PROD delivery sends
 email confirmation/recovery codes, authenticator enabled/disabled notices, and
 password-change notices (including resets). Passwords and authenticator secrets

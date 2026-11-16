@@ -1,3 +1,9 @@
+# 
+# Copyright Jerily LTD. All Rights Reserved.
+# SPDX-FileCopyrightText: 2026 Neofytos Dimitriou (neo@jerily.cy)
+# SPDX-License-Identifier: MIT.
+# 
+
 package require tcltest
 package require example-community
 namespace import ::tcltest::*
@@ -12,7 +18,7 @@ test dependencies-1 {the pinned account package loads even when a newer version 
             package present web-user
         }
     } finally {interp delete $child}
-} -result 0.5.0
+} -result 0.5.2
 
 test dependencies-2 {an already loaded different account version is rejected} -body {
     set child [interp create]
