@@ -10,16 +10,16 @@
   "dependencies": {
     "tpersist": "^0.1.5",
     "tcl": ">=9.1.0,<10.0.0",
-    "web-user": "=0.5.2",
+    "web-user": "=0.5.3",
     "web-forum": "=0.3.0",
     "twebserver": "^1.47.58",
     "web-wiki": "=0.1.5",
     "web-blog": "=0.1.5",
-    "tconfig": "1.0.1",
-    "web-static-wiki": "=0.1.9",
+    "tconfig": "1.0.2",
+    "web-static-wiki": "=0.1.10",
     "tpathexp": "^1.2.0",
-    "pure-tcl-aws-ses": "^0.1.1",
-    "pure-tcl-aws-sqs": "^0.1.1"
+    "pure-tcl-aws-ses": "^1.0.0",
+    "pure-tcl-aws-sqs": "^1.0.0"
   },
   "devDependencies": {}
 }
