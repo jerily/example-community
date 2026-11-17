@@ -18,7 +18,7 @@ test dependencies-1 {the pinned account package loads even when a newer version 
             package present web-user
         }
     } finally {interp delete $child}
-} -result 0.5.2
+} -result 0.5.3
 
 test dependencies-2 {an already loaded different account version is rejected} -body {
     set child [interp create]

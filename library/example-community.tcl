@@ -5,14 +5,14 @@
 # 
 
 # Register the package and load its dependencies.
-package require -exact web-user 0.5.2
+package require -exact web-user 0.5.3
 package require web-forum 0.3.0
 package require web-wiki 0.1.5
 package require web-blog 0.1.5
-package require -exact web-static-wiki 0.1.9
+package require -exact web-static-wiki 0.1.10
 package require tpathexp 1.2.0
 package require twebserver 1.47.58
-package require tconfig::decrypt 1.0.1
+package require tconfig::decrypt 1.0.2
 namespace eval ::community {variable root [file dirname [file dirname [info script]]]}
 foreach module {config site server} {source [file join $::community::root library $module.tcl]}
-package provide example-community 0.3.1
+package provide example-community 0.3.2
