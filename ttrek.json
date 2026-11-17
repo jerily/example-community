@@ -1,14 +1,14 @@
 {
   "name": "example-community",
   "license": "MIT",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "scripts": {
     "start": {
       "file": "start.sh"
     }
   },
   "dependencies": {
-    "tpersist": "^0.1.4",
+    "tpersist": "^0.1.5",
     "tcl": ">=9.1.0,<10.0.0",
     "web-user": "=0.5.2",
     "web-forum": "=0.3.0",
@@ -17,7 +17,9 @@
     "web-blog": "=0.1.5",
     "tconfig": "1.0.1",
     "web-static-wiki": "=0.1.9",
-    "tpathexp": "^1.2.0"
+    "tpathexp": "^1.2.0",
+    "pure-tcl-aws-ses": "^0.1.1",
+    "pure-tcl-aws-sqs": "^0.1.1"
   },
   "devDependencies": {}
 }

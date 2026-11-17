@@ -6,4 +6,4 @@
 
 # Register the package and load its dependencies.
 if {![package vsatisfies [package provide Tcl] 9.1-10]} {return}
-package ifneeded example-community 0.3.1 [list source [file join $dir library example-community.tcl]]
+package ifneeded example-community 0.3.2 [list source [file join $dir library example-community.tcl]]
