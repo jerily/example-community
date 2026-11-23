@@ -5,6 +5,7 @@
 # 
 
 # Register the package and load its dependencies.
+package require web-core 0.1.0
 package require -exact web-user 0.5.3
 package require web-forum 0.3.0
 package require web-wiki 0.1.5

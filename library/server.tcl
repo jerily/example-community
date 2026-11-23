@@ -53,7 +53,7 @@ ENV=PROD requires --config with an HTTPS site origin, key_file and PostgreSQL se
 --initdb true initializes schema/content and exits. No automatic PROD migrations.}
         return
     }
-    set args [::web::user::options {--config {} --port {} --initdb false} {*}$arguments]
+    set args [::web::core::options {--config {} --port {} --initdb false} {*}$arguments]
     set config [load_config [dict get $args --config] [dict get $args --port]]
     if {![string is boolean -strict [dict get $args --initdb]]} {error "--initdb must be a boolean"}
     serve $config [dict get $args --initdb]
