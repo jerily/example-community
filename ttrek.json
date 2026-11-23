@@ -10,6 +10,7 @@
   "dependencies": {
     "tpersist": "^0.1.5",
     "tcl": ">=9.1.0,<10.0.0",
+    "web-core": "^0.1.0",
     "web-user": "=0.5.3",
     "web-forum": "=0.3.0",
     "twebserver": "^1.47.58",
